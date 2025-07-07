@@ -26,8 +26,6 @@ use Spatie\StructureDiscoverer\Data\DiscoveredStructure;
  *
  * Handles all the complex logic for processing different recurrence types, validating
  * schedule definitions, generating hook names, and registering custom WordPress schedules.
- *
- * @package Pollora\Schedule\Infrastructure\Services
  */
 final class ScheduleDiscovery implements DiscoveryInterface
 {
@@ -54,7 +52,7 @@ final class ScheduleDiscovery implements DiscoveryInterface
     public function discover(DiscoveryLocationInterface $location, DiscoveredStructure $structure): void
     {
         // Only process classes
-        if (!$structure instanceof \Spatie\StructureDiscoverer\Data\DiscoveredClass) {
+        if (! $structure instanceof \Spatie\StructureDiscoverer\Data\DiscoveredClass) {
             return;
         }
 
@@ -123,9 +121,9 @@ final class ScheduleDiscovery implements DiscoveryInterface
                 // Register the action handler that will execute the scheduled method
                 add_action($hookName, function () use ($className, $methodName, $schedule) {
                     $instance = app($className);
-                    
+
                     // Call method with arguments if provided
-                    if (!empty($schedule->args)) {
+                    if (! empty($schedule->args)) {
                         $instance->{$methodName}($schedule->args);
                     } else {
                         $instance->{$methodName}();
@@ -133,12 +131,12 @@ final class ScheduleDiscovery implements DiscoveryInterface
                 });
 
                 // Schedule the cron event if not already scheduled
-                if (!wp_next_scheduled($hookName, $schedule->args)) {
+                if (! wp_next_scheduled($hookName, $schedule->args)) {
                     $this->scheduleWordPressCron($hookName, $scheduleIdentifier, $schedule->args);
                 }
             } catch (\Throwable $e) {
                 // Log the error but continue with other scheduled tasks
-                error_log("Failed to register Schedule from method {$className}::{$methodName}: " . $e->getMessage());
+                error_log("Failed to register Schedule from method {$className}::{$methodName}: ".$e->getMessage());
             }
         }
     }
@@ -149,18 +147,17 @@ final class ScheduleDiscovery implements DiscoveryInterface
      * Creates a human-readable hook name based on the class and method names
      * using snake_case formatting, following WordPress naming conventions.
      *
-     * @param string $className The fully qualified class name
-     * @param string $methodName The method name
-     *
+     * @param  string  $className  The fully qualified class name
+     * @param  string  $methodName  The method name
      * @return string The generated hook name in snake_case format
      */
     private function generateHookName(string $className, string $methodName): string
     {
         // Extract just the class name without namespace
         $shortClassName = class_basename($className);
-        
+
         // Convert to snake_case following WordPress conventions
-        return Str::snake($shortClassName) . '_' . Str::snake($methodName);
+        return Str::snake($shortClassName).'_'.Str::snake($methodName);
     }
 
     /**
@@ -170,9 +167,8 @@ final class ScheduleDiscovery implements DiscoveryInterface
      * a standardized schedule identifier that can be used by WordPress cron.
      * Also handles registration of custom schedules when needed.
      *
-     * @param string|array<string,mixed>|Every|Interval $recurrence The recurrence definition to process
-     * @param string $hookName The hook name for custom schedule registration
-     *
+     * @param  string|array<string,mixed>|Every|Interval  $recurrence  The recurrence definition to process
+     * @param  string  $hookName  The hook name for custom schedule registration
      * @return string The processed schedule identifier
      *
      * @throws InvalidArgumentException If the recurrence type is unsupported or invalid
@@ -182,16 +178,16 @@ final class ScheduleDiscovery implements DiscoveryInterface
         return match (true) {
             // Handle string-based WordPress schedules
             is_string($recurrence) => $this->validateAndReturnStringRecurrence($recurrence),
-            
+
             // Handle array-based custom schedules
             is_array($recurrence) => $this->processArrayRecurrence($recurrence, $hookName),
-            
+
             // Handle Every enum values
             $recurrence instanceof Every => $this->processEveryRecurrence($recurrence, $hookName),
-            
+
             // Handle Interval instances
             $recurrence instanceof Interval => $this->processIntervalRecurrence($recurrence, $hookName),
-            
+
             // Unsupported recurrence type
             default => throw new InvalidArgumentException('Unsupported recurrence type provided to Schedule attribute'),
         };
@@ -202,15 +198,14 @@ final class ScheduleDiscovery implements DiscoveryInterface
      *
      * Ensures the provided string matches one of WordPress's built-in schedule intervals.
      *
-     * @param string $recurrence The WordPress schedule name to validate
-     *
+     * @param  string  $recurrence  The WordPress schedule name to validate
      * @return string The validated schedule name
      *
      * @throws InvalidArgumentException If the schedule name is not recognized
      */
     private function validateAndReturnStringRecurrence(string $recurrence): string
     {
-        if (!in_array($recurrence, self::DEFAULT_SCHEDULES, true)) {
+        if (! in_array($recurrence, self::DEFAULT_SCHEDULES, true)) {
             throw new InvalidArgumentException(
                 sprintf(
                     'Invalid WordPress schedule "%s". Allowed schedules: %s',
@@ -229,29 +224,28 @@ final class ScheduleDiscovery implements DiscoveryInterface
      * Validates that the array contains required 'interval' and 'display' keys,
      * registers the custom schedule with WordPress, and returns the schedule identifier.
      *
-     * @param array<string,mixed> $recurrence The custom schedule definition array
-     * @param string $hookName The hook name to use as schedule identifier
-     *
+     * @param  array<string,mixed>  $recurrence  The custom schedule definition array
+     * @param  string  $hookName  The hook name to use as schedule identifier
      * @return string The custom schedule identifier
      *
      * @throws InvalidArgumentException If the array structure is invalid
      */
     private function processArrayRecurrence(array $recurrence, string $hookName): string
     {
-        if (!isset($recurrence['interval']) || !is_numeric($recurrence['interval'])) {
+        if (! isset($recurrence['interval']) || ! is_numeric($recurrence['interval'])) {
             throw new InvalidArgumentException(
                 'Custom schedule array must contain a numeric "interval" key (seconds)'
             );
         }
 
-        if (!isset($recurrence['display']) || !is_string($recurrence['display'])) {
+        if (! isset($recurrence['display']) || ! is_string($recurrence['display'])) {
             throw new InvalidArgumentException(
                 'Custom schedule array must contain a string "display" key (human-readable name)'
             );
         }
 
         // Register the custom schedule with WordPress
-        $scheduleKey = 'custom_' . md5($hookName);
+        $scheduleKey = 'custom_'.md5($hookName);
         $this->registerCustomSchedule($scheduleKey, $recurrence);
 
         return $scheduleKey;
@@ -263,22 +257,21 @@ final class ScheduleDiscovery implements DiscoveryInterface
      * Converts Every enum values to their corresponding WordPress schedule names
      * or registers custom schedules for non-standard intervals like MONTH/YEAR.
      *
-     * @param Every $recurrence The Every enum value to process
-     * @param string $hookName The hook name for custom schedule registration
-     *
+     * @param  Every  $recurrence  The Every enum value to process
+     * @param  string  $hookName  The hook name for custom schedule registration
      * @return string The processed schedule identifier
      */
     private function processEveryRecurrence(Every $recurrence, string $hookName): string
     {
         // For standard WordPress schedules, return the direct mapping
-        if (!$recurrence->isCustom()) {
+        if (! $recurrence->isCustom()) {
             return $recurrence->toScheduleKey();
         }
 
         // For custom schedules (MONTH, YEAR), register and return identifier
-        $scheduleKey = 'every_' . strtolower($recurrence->name);
+        $scheduleKey = 'every_'.strtolower($recurrence->name);
         $interval = $recurrence->toInterval();
-        
+
         $this->registerCustomSchedule($scheduleKey, [
             'interval' => $interval->toSeconds(),
             'display' => $interval->toDisplayString(),
@@ -292,16 +285,15 @@ final class ScheduleDiscovery implements DiscoveryInterface
      *
      * Registers a custom schedule for the Interval and returns its identifier.
      *
-     * @param Interval $recurrence The Interval instance to process
-     * @param string $hookName The hook name for custom schedule registration
-     *
+     * @param  Interval  $recurrence  The Interval instance to process
+     * @param  string  $hookName  The hook name for custom schedule registration
      * @return string The custom schedule identifier
      */
     private function processIntervalRecurrence(Interval $recurrence, string $hookName): string
     {
         // Generate unique identifier based on interval
-        $scheduleKey = 'interval_' . md5($hookName . '_' . $recurrence->toSeconds());
-        
+        $scheduleKey = 'interval_'.md5($hookName.'_'.$recurrence->toSeconds());
+
         $this->registerCustomSchedule($scheduleKey, [
             'interval' => $recurrence->toSeconds(),
             'display' => $recurrence->toDisplayString(),
@@ -316,10 +308,8 @@ final class ScheduleDiscovery implements DiscoveryInterface
      * Adds a new schedule interval to WordPress's cron system using the cron_schedules filter.
      * This allows custom intervals beyond WordPress's built-in options.
      *
-     * @param string $scheduleKey The unique key for the custom schedule
-     * @param array<string,mixed> $schedule The schedule definition with 'interval' and 'display' keys
-     *
-     * @return void
+     * @param  string  $scheduleKey  The unique key for the custom schedule
+     * @param  array<string,mixed>  $schedule  The schedule definition with 'interval' and 'display' keys
      */
     private function registerCustomSchedule(string $scheduleKey, array $schedule): void
     {
@@ -336,11 +326,9 @@ final class ScheduleDiscovery implements DiscoveryInterface
     /**
      * Schedule a WordPress cron event
      *
-     * @param string $hookName The hook name to schedule
-     * @param string $interval The interval (e.g., 'hourly', 'daily')
-     * @param array<mixed> $args Optional arguments to pass to the hook
-     *
-     * @return void
+     * @param  string  $hookName  The hook name to schedule
+     * @param  string  $interval  The interval (e.g., 'hourly', 'daily')
+     * @param  array<mixed>  $args  Optional arguments to pass to the hook
      */
     private function scheduleWordPressCron(string $hookName, string $interval, array $args = []): void
     {
