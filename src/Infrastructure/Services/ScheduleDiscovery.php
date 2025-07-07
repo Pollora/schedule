@@ -82,7 +82,7 @@ final class ScheduleDiscovery implements DiscoveryInterface
                     ]);
                 }
             }
-        } catch (\Throwable $e) {
+        } catch (\Throwable) {
             // Skip classes that can't be reflected
             // This might happen for classes with missing dependencies
             return;
@@ -119,11 +119,11 @@ final class ScheduleDiscovery implements DiscoveryInterface
                 $scheduleIdentifier = $this->processRecurrence($schedule->recurrence, $hookName);
 
                 // Register the action handler that will execute the scheduled method
-                add_action($hookName, function () use ($className, $methodName, $schedule) {
+                add_action($hookName, function () use ($className, $methodName, $schedule): void {
                     $instance = app($className);
 
                     // Call method with arguments if provided
-                    if (! empty($schedule->args)) {
+                    if ($schedule->args !== []) {
                         $instance->{$methodName}($schedule->args);
                     } else {
                         $instance->{$methodName}();
@@ -183,7 +183,7 @@ final class ScheduleDiscovery implements DiscoveryInterface
             is_array($recurrence) => $this->processArrayRecurrence($recurrence, $hookName),
 
             // Handle Every enum values
-            $recurrence instanceof Every => $this->processEveryRecurrence($recurrence, $hookName),
+            $recurrence instanceof Every => $this->processEveryRecurrence($recurrence),
 
             // Handle Interval instances
             $recurrence instanceof Interval => $this->processIntervalRecurrence($recurrence, $hookName),
@@ -258,10 +258,9 @@ final class ScheduleDiscovery implements DiscoveryInterface
      * or registers custom schedules for non-standard intervals like MONTH/YEAR.
      *
      * @param  Every  $recurrence  The Every enum value to process
-     * @param  string  $hookName  The hook name for custom schedule registration
      * @return string The processed schedule identifier
      */
-    private function processEveryRecurrence(Every $recurrence, string $hookName): string
+    private function processEveryRecurrence(Every $recurrence): string
     {
         // For standard WordPress schedules, return the direct mapping
         if (! $recurrence->isCustom()) {
