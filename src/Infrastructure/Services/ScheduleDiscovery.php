@@ -10,6 +10,7 @@ use Pollora\Attributes\Schedule;
 use Pollora\Discovery\Domain\Contracts\DiscoveryInterface;
 use Pollora\Discovery\Domain\Contracts\DiscoveryLocationInterface;
 use Pollora\Discovery\Domain\Services\IsDiscovery;
+use Pollora\Discovery\Domain\Services\HasInstancePool;
 use Pollora\Schedule\Every;
 use Pollora\Schedule\Interval;
 use ReflectionClass;
@@ -29,7 +30,7 @@ use Spatie\StructureDiscoverer\Data\DiscoveredStructure;
  */
 final class ScheduleDiscovery implements DiscoveryInterface
 {
-    use IsDiscovery;
+    use IsDiscovery, HasInstancePool;
 
     /**
      * Default WordPress recurrence schedules.
@@ -120,7 +121,8 @@ final class ScheduleDiscovery implements DiscoveryInterface
 
                 // Register the action handler that will execute the scheduled method
                 add_action($hookName, function () use ($className, $methodName, $schedule): void {
-                    $instance = app($className);
+                    // Use instance pool if available, otherwise fallback to container
+                    $instance = $this->getInstanceFromPool($className);
 
                     // Call method with arguments if provided
                     if ($schedule->args !== []) {
