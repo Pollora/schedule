@@ -9,8 +9,8 @@ use InvalidArgumentException;
 use Pollora\Attributes\Schedule;
 use Pollora\Discovery\Domain\Contracts\DiscoveryInterface;
 use Pollora\Discovery\Domain\Contracts\DiscoveryLocationInterface;
-use Pollora\Discovery\Domain\Services\IsDiscovery;
 use Pollora\Discovery\Domain\Services\HasInstancePool;
+use Pollora\Discovery\Domain\Services\IsDiscovery;
 use Pollora\Schedule\Every;
 use Pollora\Schedule\Interval;
 use ReflectionClass;
@@ -30,7 +30,7 @@ use Spatie\StructureDiscoverer\Data\DiscoveredStructure;
  */
 final class ScheduleDiscovery implements DiscoveryInterface
 {
-    use IsDiscovery, HasInstancePool;
+    use HasInstancePool, IsDiscovery;
 
     /**
      * Default WordPress recurrence schedules.
