@@ -50,7 +50,7 @@ final class ScheduleDiscovery implements DiscoveryInterface
      * Discovers methods with Schedule attributes and collects them for registration.
      * Only processes public methods that have the Schedule attribute.
      */
-    public function discover(DiscoveryLocationInterface $location, DiscoveredStructure $structure): void
+    public function discover(DiscoveryLocationInterface $location, DiscoveredStructure $structure, ?\Pollora\Discovery\Domain\Contracts\ReflectionCacheInterface $reflectionCache = null): void
     {
         // Only process classes
         if (! $structure instanceof \Spatie\StructureDiscoverer\Data\DiscoveredClass) {
@@ -63,10 +63,12 @@ final class ScheduleDiscovery implements DiscoveryInterface
         }
 
         try {
-            // Use reflection to examine methods for Schedule attributes
-            $reflectionClass = new ReflectionClass($structure->namespace.'\\'.$structure->name);
+            $className = $structure->namespace.'\\'.$structure->name;
+            
+            $reflectionClass = $reflectionCache->getClassReflection($className);
+            $methods = $reflectionCache->getPublicMethods($className);
 
-            foreach ($reflectionClass->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
+            foreach ($methods as $method) {
                 $scheduleAttributes = $method->getAttributes(Schedule::class);
 
                 if (empty($scheduleAttributes)) {
@@ -76,7 +78,7 @@ final class ScheduleDiscovery implements DiscoveryInterface
                 foreach ($scheduleAttributes as $scheduleAttribute) {
                     // Collect the method for registration
                     $this->getItems()->add($location, [
-                        'class' => $structure->namespace.'\\'.$structure->name,
+                        'class' => $className,
                         'method' => $method->getName(),
                         'attribute' => $scheduleAttribute,
                         'reflection_method' => $method,
