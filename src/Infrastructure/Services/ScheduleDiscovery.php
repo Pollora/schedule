@@ -31,7 +31,8 @@ use Spatie\StructureDiscoverer\Data\DiscoveredStructure;
  */
 final class ScheduleDiscovery implements DiscoveryInterface
 {
-    use HasInstancePool, IsDiscovery;
+    use HasInstancePool;
+    use IsDiscovery;
 
     /**
      * Default WordPress recurrence schedules.
@@ -141,7 +142,7 @@ final class ScheduleDiscovery implements DiscoveryInterface
                 }
             } catch (\Throwable $e) {
                 // Log the error but continue with other scheduled tasks
-                error_log("Failed to register Schedule from method {$className}::{$methodName}: ".$e->getMessage());
+                error_log(sprintf('Failed to register Schedule from method %s::%s: ', $className, $methodName).$e->getMessage());
             }
         }
     }
@@ -337,7 +338,7 @@ final class ScheduleDiscovery implements DiscoveryInterface
     private function scheduleWordPressCron(string $hookName, string $interval, array $args = []): void
     {
         if (wp_schedule_event(time(), $interval, $hookName, $args) === false) {
-            error_log("Failed to schedule WordPress cron event for hook: {$hookName}");
+            error_log('Failed to schedule WordPress cron event for hook: '.$hookName);
         }
     }
 
