@@ -9,11 +9,13 @@ use InvalidArgumentException;
 use Pollora\Attributes\Schedule;
 use Pollora\Discovery\Domain\Contracts\DiscoveryInterface;
 use Pollora\Discovery\Domain\Contracts\DiscoveryLocationInterface;
+use Pollora\Discovery\Domain\Contracts\ReflectionCacheInterface;
 use Pollora\Discovery\Domain\Services\HasInstancePool;
 use Pollora\Discovery\Domain\Services\IsDiscovery;
 use Pollora\Schedule\Every;
 use Pollora\Schedule\Interval;
 use ReflectionMethod;
+use Spatie\StructureDiscoverer\Data\DiscoveredClass;
 use Spatie\StructureDiscoverer\Data\DiscoveredStructure;
 
 /**
@@ -49,10 +51,10 @@ final class ScheduleDiscovery implements DiscoveryInterface
      * Discovers methods with Schedule attributes and collects them for registration.
      * Only processes public methods that have the Schedule attribute.
      */
-    public function discover(DiscoveryLocationInterface $location, DiscoveredStructure $structure, ?\Pollora\Discovery\Domain\Contracts\ReflectionCacheInterface $reflectionCache = null): void
+    public function discover(DiscoveryLocationInterface $location, DiscoveredStructure $structure, ?ReflectionCacheInterface $reflectionCache = null): void
     {
         // Only process classes
-        if (! $structure instanceof \Spatie\StructureDiscoverer\Data\DiscoveredClass) {
+        if (! $structure instanceof DiscoveredClass) {
             return;
         }
 
