@@ -38,7 +38,7 @@ final class ScheduleDiscovery implements DiscoveryInterface
      *
      * @var array<string>
      */
-    private const DEFAULT_SCHEDULES = [
+    private const array DEFAULT_SCHEDULES = [
         'hourly',
         'twicedaily',
         'daily',
