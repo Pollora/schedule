@@ -278,8 +278,8 @@ final class ScheduleDiscovery implements DiscoveryInterface
         $interval = $recurrence->toInterval();
 
         $this->registerCustomSchedule($scheduleKey, [
-            'interval' => $interval->toSeconds(),
-            'display' => $interval->toDisplayString(),
+            'interval' => $interval->totalSeconds(),
+            'display' => $interval->display,
         ]);
 
         return $scheduleKey;
@@ -297,11 +297,11 @@ final class ScheduleDiscovery implements DiscoveryInterface
     private function processIntervalRecurrence(Interval $recurrence, string $hookName): string
     {
         // Generate unique identifier based on interval
-        $scheduleKey = 'interval_'.md5($hookName.'_'.$recurrence->toSeconds());
+        $scheduleKey = 'interval_'.md5($hookName.'_'.$recurrence->totalSeconds());
 
         $this->registerCustomSchedule($scheduleKey, [
-            'interval' => $recurrence->toSeconds(),
-            'display' => $recurrence->toDisplayString(),
+            'interval' => $recurrence->totalSeconds(),
+            'display' => $recurrence->display,
         ]);
 
         return $scheduleKey;
