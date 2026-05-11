@@ -14,6 +14,7 @@ use Pollora\Discovery\Domain\Services\HasInstancePool;
 use Pollora\Discovery\Domain\Services\IsDiscovery;
 use Pollora\Schedule\Every;
 use Pollora\Schedule\Interval;
+use Psr\Log\LoggerInterface;
 use ReflectionMethod;
 use Spatie\StructureDiscoverer\Data\DiscoveredClass;
 use Spatie\StructureDiscoverer\Data\DiscoveredStructure;
@@ -33,6 +34,10 @@ final class ScheduleDiscovery implements DiscoveryInterface
 {
     use HasInstancePool;
     use IsDiscovery;
+
+    public function __construct(
+        private readonly ?LoggerInterface $logger = null
+    ) {}
 
     /**
      * Default WordPress recurrence schedules.
@@ -142,7 +147,7 @@ final class ScheduleDiscovery implements DiscoveryInterface
                 }
             } catch (\Throwable $e) {
                 // Log the error but continue with other scheduled tasks
-                error_log(sprintf('Failed to register Schedule from method %s::%s: ', $className, $methodName).$e->getMessage());
+                $this->logger?->error(sprintf('Failed to register Schedule from method %s::%s', $className, $methodName), ['exception' => $e]);
             }
         }
     }
@@ -335,7 +340,7 @@ final class ScheduleDiscovery implements DiscoveryInterface
     private function scheduleWordPressCron(string $hookName, string $interval, array $args = []): void
     {
         if (wp_schedule_event(time(), $interval, $hookName, $args) === false) {
-            error_log('Failed to schedule WordPress cron event for hook: '.$hookName);
+            $this->logger?->error('Failed to schedule WordPress cron event for hook: '.$hookName);
         }
     }
 
