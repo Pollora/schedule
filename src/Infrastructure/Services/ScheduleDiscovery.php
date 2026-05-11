@@ -191,11 +191,8 @@ final class ScheduleDiscovery implements DiscoveryInterface
             // Handle Every enum values
             $recurrence instanceof Every => $this->processEveryRecurrence($recurrence),
 
-            // Handle Interval instances
-            $recurrence instanceof Interval => $this->processIntervalRecurrence($recurrence, $hookName),
-
-            // Unsupported recurrence type
-            default => throw new InvalidArgumentException('Unsupported recurrence type provided to Schedule attribute'),
+            // Handle Interval instances (only remaining type)
+            default => $this->processIntervalRecurrence($recurrence, $hookName),
         };
     }
 
