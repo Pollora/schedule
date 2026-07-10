@@ -15,7 +15,6 @@ use Pollora\Discovery\Domain\Services\IsDiscovery;
 use Pollora\Schedule\Every;
 use Pollora\Schedule\Interval;
 use Psr\Log\LoggerInterface;
-use ReflectionMethod;
 use Spatie\StructureDiscoverer\Data\DiscoveredClass;
 use Spatie\StructureDiscoverer\Data\DiscoveredStructure;
 
@@ -71,9 +70,7 @@ final class ScheduleDiscovery implements DiscoveryInterface
 
         try {
             $className = $structure->namespace.'\\'.$structure->name;
-
-            $reflectionClass = $reflectionCache->getClassReflection($className);
-            $methods = $reflectionClass->getMethods(ReflectionMethod::IS_PUBLIC);
+            $methods = $reflectionCache->getPublicMethods($className);
 
             foreach ($methods as $method) {
                 $scheduleAttributes = $method->getAttributes(Schedule::class);
