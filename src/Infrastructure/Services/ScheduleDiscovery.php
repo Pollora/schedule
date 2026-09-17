@@ -14,7 +14,7 @@ use Pollora\Discovery\Domain\Services\HasInstancePool;
 use Pollora\Discovery\Domain\Services\IsDiscovery;
 use Pollora\Schedule\Every;
 use Pollora\Schedule\Interval;
-use ReflectionMethod;
+use Psr\Log\LoggerInterface;
 use Spatie\StructureDiscoverer\Data\DiscoveredClass;
 use Spatie\StructureDiscoverer\Data\DiscoveredStructure;
 
@@ -33,6 +33,10 @@ final class ScheduleDiscovery implements DiscoveryInterface
 {
     use HasInstancePool;
     use IsDiscovery;
+
+    public function __construct(
+        private readonly ?LoggerInterface $logger = null
+    ) {}
 
     /**
      * Default WordPress recurrence schedules.
@@ -66,9 +70,7 @@ final class ScheduleDiscovery implements DiscoveryInterface
 
         try {
             $className = $structure->namespace.'\\'.$structure->name;
-
-            $reflectionClass = $reflectionCache->getClassReflection($className);
-            $methods = $reflectionClass->getMethods(ReflectionMethod::IS_PUBLIC);
+            $methods = $reflectionCache->getPublicMethods($className);
 
             foreach ($methods as $method) {
                 $scheduleAttributes = $method->getAttributes(Schedule::class);
@@ -142,7 +144,7 @@ final class ScheduleDiscovery implements DiscoveryInterface
                 }
             } catch (\Throwable $e) {
                 // Log the error but continue with other scheduled tasks
-                error_log(sprintf('Failed to register Schedule from method %s::%s: ', $className, $methodName).$e->getMessage());
+                $this->logger?->error(sprintf('Failed to register Schedule from method %s::%s', $className, $methodName), ['exception' => $e]);
             }
         }
     }
@@ -191,11 +193,8 @@ final class ScheduleDiscovery implements DiscoveryInterface
             // Handle Every enum values
             $recurrence instanceof Every => $this->processEveryRecurrence($recurrence),
 
-            // Handle Interval instances
-            $recurrence instanceof Interval => $this->processIntervalRecurrence($recurrence, $hookName),
-
-            // Unsupported recurrence type
-            default => throw new InvalidArgumentException('Unsupported recurrence type provided to Schedule attribute'),
+            // Handle Interval instances (only remaining type)
+            default => $this->processIntervalRecurrence($recurrence, $hookName),
         };
     }
 
@@ -278,8 +277,8 @@ final class ScheduleDiscovery implements DiscoveryInterface
         $interval = $recurrence->toInterval();
 
         $this->registerCustomSchedule($scheduleKey, [
-            'interval' => $interval->toSeconds(),
-            'display' => $interval->toDisplayString(),
+            'interval' => $interval->totalSeconds(),
+            'display' => $interval->display,
         ]);
 
         return $scheduleKey;
@@ -297,11 +296,11 @@ final class ScheduleDiscovery implements DiscoveryInterface
     private function processIntervalRecurrence(Interval $recurrence, string $hookName): string
     {
         // Generate unique identifier based on interval
-        $scheduleKey = 'interval_'.md5($hookName.'_'.$recurrence->toSeconds());
+        $scheduleKey = 'interval_'.md5($hookName.'_'.$recurrence->totalSeconds());
 
         $this->registerCustomSchedule($scheduleKey, [
-            'interval' => $recurrence->toSeconds(),
-            'display' => $recurrence->toDisplayString(),
+            'interval' => $recurrence->totalSeconds(),
+            'display' => $recurrence->display,
         ]);
 
         return $scheduleKey;
@@ -338,7 +337,7 @@ final class ScheduleDiscovery implements DiscoveryInterface
     private function scheduleWordPressCron(string $hookName, string $interval, array $args = []): void
     {
         if (wp_schedule_event(time(), $interval, $hookName, $args) === false) {
-            error_log('Failed to schedule WordPress cron event for hook: '.$hookName);
+            $this->logger?->error('Failed to schedule WordPress cron event for hook: '.$hookName);
         }
     }
 
