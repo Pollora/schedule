@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-13
+
+The Action Scheduler driver and the `cron` option as an index of every driver. `ScheduleDriver` is unchanged, so the framework's `^0.1` still holds; 1.0.0 comes with the framework's release.
+
 ### Added
 
 - `ActionSchedulerDriver`: events are Action Scheduler actions, in a group of their own (`pollora/schedule`), so cancelling a hook never reaches the actions another plugin keeps on it. The core's ten-minute window ignores a duplicate single event
