@@ -112,7 +112,12 @@ final class Schedule
             $name = getenv('POLLORA_SCHEDULE_DRIVER');
 
             // WP-Cron by default still sets the guard: it must not run what another driver kept
-            self::driver(is_string($name) && $name !== '' ? $name : 'wp-cron');
+            try {
+                self::driver(is_string($name) && $name !== '' ? $name : 'wp-cron');
+            } catch (InvalidArgumentException) {
+                // A driver added with extend() later: the application chooses it then
+                self::driver('wp-cron');
+            }
         }
 
         self::boot();

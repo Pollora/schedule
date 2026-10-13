@@ -7,6 +7,7 @@ use Pollora\Schedule\Contracts\Identifies;
 use Pollora\Schedule\Contracts\ScheduleDriver;
 use Pollora\Schedule\Event;
 use Pollora\Schedule\Migration\Migrator;
+use Pollora\Schedule\Schedule;
 use Pollora\Schedule\ScheduleEngine;
 use Pollora\Schedule\Support\CronIndex;
 
@@ -137,4 +138,24 @@ it('identifies the placement a migration makes', function (): void {
     expect($report->moved)->toHaveCount(1)
         ->and($this->driver->placed[0]->id)->not->toBeNull()
         ->and(CronIndex::idOf('digest'))->toBe($this->driver->placed[0]->id);
+});
+
+it('does not fail when the environment names a driver the application adds afterwards', function (): void {
+    $schedule = new ReflectionClass(Schedule::class);
+    $schedule->setStaticPropertyValue('engine', null);
+    $schedule->setStaticPropertyValue('wanted', null);
+    putenv('POLLORA_SCHEDULE_DRIVER=queue');
+
+    try {
+        expect(Schedule::engine()->driverName())->toBe('wp-cron');
+
+        Schedule::extend('queue', new IdentifyingDriver);
+        Schedule::driver('queue');
+
+        expect(Schedule::engine()->driverName())->toBe('queue');
+    } finally {
+        putenv('POLLORA_SCHEDULE_DRIVER');
+        $schedule->setStaticPropertyValue('engine', null);
+        $schedule->setStaticPropertyValue('drivers', []);
+    }
 });

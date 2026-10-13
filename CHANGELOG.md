@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 What a driver with no store of its own (a queue of deferred jobs) needs. `ScheduleDriver` is unchanged.
 
+### Fixed
+
+- `POLLORA_SCHEDULE_DRIVER` naming a driver the application adds afterwards with `Schedule::extend()` no longer throws when the engine is first used: it starts on WP-Cron, and the application chooses its driver
+
 ### Added
 
 - `Contracts\Identifies`: a driver that can only be told what to run, not asked what it holds. The engine gives each placement an identifier (`Event::$id`), hands it over with `placeIdentified()` and writes it in the `cron` entry (`id` key); the driver's job runs only if the entry still exists and carries its identifier, so cancelling is removing the entry
