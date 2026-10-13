@@ -585,6 +585,16 @@ final class ScheduleEngine
     }
 
     /**
+     * What the 'cron' option shows: every event with the driver that keeps it, soonest first. No query to a driver.
+     *
+     * @return list<Event>
+     */
+    public function index(): array
+    {
+        return CronIndex::events();
+    }
+
+    /**
      * Give the driver what was scheduled while it could not store anything.
      *
      * An event already there is not scheduled again: before the driver is ready,

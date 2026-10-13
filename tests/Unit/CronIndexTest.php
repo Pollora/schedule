@@ -76,6 +76,14 @@ it('records an event and finds its owner, and an entry without a marker is WP-Cr
         ->and(array_column(CronIndex::events('action-scheduler'), 'driver'))->toBe(['action-scheduler']);
 });
 
+it('lists the index with the driver of each event, without asking a driver', function (): void {
+    $this->engine->place(new Event('digest', time() + 100));
+    $this->cron[time() + 50] = ['wp_version_check' => [md5(serialize([])) => ['schedule' => 'daily', 'args' => [], 'interval' => 86400]]];
+    ksort($this->cron);
+
+    expect(array_map(fn (Event $e): array => [$e->hook, $e->driver], $this->engine->index()))->toBe([['wp_version_check', 'wp-cron'], ['digest', 'action-scheduler']]);
+});
+
 it('keeps the name of a schedule when only the driver\'s interval is known', function (): void {
     $this->schedules = ['custom_a' => ['interval' => 900], 'every_900_seconds' => ['interval' => 900]];
     CronIndex::record(new Event('job', 1000, 'custom_a', [], 900), 'action-scheduler');
