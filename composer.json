@@ -1,0 +1,72 @@
+{
+    "name": "pollora/schedule",
+    "description": "Scheduled and deferred tasks for WordPress: one engine, a fluent API and #[Schedule] attributes, WP-Cron as the default driver. Runs with or without Laravel.",
+    "type": "library",
+    "keywords": [
+        "cron",
+        "pollora",
+        "schedule",
+        "wordpress",
+        "wp-cron"
+    ],
+    "homepage": "https://pollora.dev/advanced/scheduling/",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Amphibee",
+            "email": "contact@amphibee.fr"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/Pollora/schedule/issues",
+        "source": "https://github.com/Pollora/schedule"
+    },
+    "require": {
+        "php": "^8.3",
+        "pollora/attributes": "^0.1 || ^1.0",
+        "pollora/discovery": "^0.1 || ^1.0",
+        "psr/container": "^1.1 || ^2.0",
+        "psr/log": "^3.0"
+    },
+    "require-dev": {
+        "antecedent/patchwork": "^2.2",
+        "brain/monkey": "^2.7",
+        "illuminate/support": "^13.0",
+        "laravel/pint": "^1.22.1",
+        "mockery/mockery": "^1.6.12",
+        "pestphp/pest": "^3.8.2",
+        "phpstan/phpstan": "^2.1.16",
+        "szepeviktor/phpstan-wordpress": "^2.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Pollora\\Schedule\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Pollora\\Schedule\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": [
+            "@test:unit",
+            "@phpstan",
+            "@lint:check"
+        ],
+        "test:unit": "pest",
+        "test:coverage": "pest --coverage",
+        "phpstan": "phpstan analyse",
+        "phpstan:ci": "phpstan analyse --no-progress",
+        "lint": "pint",
+        "lint:check": "pint --test"
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}
