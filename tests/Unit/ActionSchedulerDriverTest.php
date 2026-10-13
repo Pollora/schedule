@@ -91,3 +91,66 @@ it('is available once its functions exist, ready once initialised', function ():
 
     expect($this->driver->ready())->toBeFalse();
 });
+
+describe('another group', function (): void {
+    it('keeps its actions apart: the default group neither sees nor cancels them', function (): void {
+        $crm = new ActionSchedulerDriver('crm');
+        $time = time() + 3600;
+
+        $crm->once('digest', $time, ['user' => 1]);
+        $this->driver->once('digest', $time, ['user' => 1]);
+
+        expect($crm->next('digest', ['user' => 1]))->toBe($time)
+            ->and(array_column(array_map(fn ($a) => (array) $a, array_values(ActionScheduler_FakeStore::$actions)), 'group'))->toBe(['crm', 'pollora/schedule'])
+            ->and($crm->cancel('digest', ['user' => 1]))->toBe(1)
+            ->and($this->driver->next('digest', ['user' => 1]))->toBe($time)
+            ->and($crm->events())->toBe([]);
+    });
+
+    it('is not watched as the engine\'s: an action of another group is never reported', function (): void {
+        $reported = [];
+        $added = [];
+        Functions\when('add_action')->alias(function (string $hook, callable $callback) use (&$added): bool {
+            $added[$hook][] = $callback;
+
+            return true;
+        });
+        (new ActionSchedulerDriver('crm'))->observe(function (string $hook) use (&$reported): void {
+            $reported[] = $hook;
+        });
+        $id = as_schedule_single_action(time() + 60, 'mine', [], 'pollora/schedule');
+
+        foreach ($added['action_scheduler_stored_action'] as $callback) {
+            $callback($id);
+        }
+
+        expect($reported)->toBe([]);
+    });
+});
+
+describe('enqueue', function (): void {
+    it('stores an event as it is, without looking for a duplicate', function (): void {
+        $time = time() + 3600;
+        $this->driver->enqueue('digest', $time, ['id' => 'a']);
+        $this->driver->enqueue('digest', $time + 1, ['id' => 'a']);
+
+        expect(ActionScheduler_FakeStore::$actions)->toHaveCount(2);
+    });
+
+    it('queues an async action when the time is now or past, in its own group', function (): void {
+        $crm = new ActionSchedulerDriver('crm');
+        $crm->enqueue('digest', time() - 5, ['id' => 'a']);
+
+        $action = array_values(ActionScheduler_FakeStore::$actions)[0];
+
+        expect($action->group)->toBe('crm')
+            ->and($action->schedule->timestamp)->toBeLessThanOrEqual(time());
+    });
+
+    it('says when Action Scheduler does not store it', function (): void {
+        ActionScheduler::$initialized = false;
+
+        expect(fn () => $this->driver->enqueue('digest', time(), []))->toThrow(ScheduleException::class)
+            ->and(fn () => $this->driver->enqueue('digest', time() + 600, []))->toThrow(ScheduleException::class);
+    });
+});

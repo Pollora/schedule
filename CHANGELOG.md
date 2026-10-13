@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `ActionSchedulerDriver` takes the group of its actions (`new ActionSchedulerDriver('crm')`), `pollora/schedule` by default. Every query, cancellation and observation uses the instance's group, and the `cron` index follows the default group only: another package can queue work in a group of its own without it ever reaching the index
+- `Contracts\Enqueues` and `ActionSchedulerDriver::enqueue()`: store an event as it is, with no duplicate check, for a caller that gives each event an identifier of its own. A time that is now or past queues an async action (`as_enqueue_async_action()`)
+
 ## [0.1.1] - 2026-10-13
 
 The Action Scheduler driver and the `cron` option as an index of every driver. `ScheduleDriver` is unchanged, so the framework's `^0.1` still holds; 1.0.0 comes with the framework's release.

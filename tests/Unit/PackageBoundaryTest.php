@@ -25,6 +25,7 @@ arch('schedule stays free of the Laravel application')
         'ActionScheduler_Store',
         'add_action',
         'apply_filters',
+        'as_enqueue_async_action',
         'as_get_scheduled_actions',
         'as_next_scheduled_action',
         'as_schedule_recurring_action',

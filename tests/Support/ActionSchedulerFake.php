@@ -114,6 +114,12 @@ function fake_as_create(string $hook, array $args, string $group, int $timestamp
     return $id;
 }
 
+function as_enqueue_async_action($hook, $args = [], $group = '', $unique = false, $priority = 10): int
+{
+    // An async action has no date: it is due now
+    return ActionScheduler::$initialized ? fake_as_create($hook, $args, $group, time(), null) : 0;
+}
+
 function as_schedule_single_action($timestamp, $hook, $args = [], $group = '', $unique = false, $priority = 10): int
 {
     return ActionScheduler::$initialized ? fake_as_create($hook, $args, $group, (int) $timestamp, null) : 0;

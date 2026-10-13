@@ -24,6 +24,14 @@ abstract class ActionScheduler_Store
 /**
  * @param  array<int|string, mixed>  $args
  */
+/**
+ * @param  array<int|string, mixed>  $args
+ */
+function as_enqueue_async_action(string $hook, array $args = [], string $group = '', bool $unique = false, int $priority = 10): int
+{
+    return 0;
+}
+
 function as_schedule_single_action(int $timestamp, string $hook, array $args = [], string $group = '', bool $unique = false, int $priority = 10): int {}
 
 /**
