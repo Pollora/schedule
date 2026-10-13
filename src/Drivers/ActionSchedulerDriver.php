@@ -70,6 +70,15 @@ final class ActionSchedulerDriver implements DefersUntilReady, FindsEvent, Repor
             }
         };
 
+        // A deleted action cannot be read any more, so what it was is unknown: reconcile once, when the request ends
+        $reconcile = false;
+        add_action('action_scheduler_deleted_action', static function () use (&$reconcile, $changed): void {
+            if (! $reconcile) {
+                $reconcile = true;
+                add_action('shutdown', static fn () => $changed('', []));
+            }
+        }, 10, 1);
+
         foreach (['action_scheduler_stored_action', 'action_scheduler_completed_action', 'action_scheduler_failed_action', 'action_scheduler_canceled_action'] as $hook) {
             add_action($hook, $report, 10, 1);
         }

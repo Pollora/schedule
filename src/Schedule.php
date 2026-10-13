@@ -164,14 +164,15 @@ final class Schedule
 
         if ($driver instanceof WpCronDriver) {
             $engine->useDriver($driver);
-            $engine->guard();
 
-            // Events a driver kept before it was set aside still report to the index
-            foreach (self::DRIVERS as $driverName => $class) {
-                if ($driverName !== 'wp-cron' && is_subclass_of($class, ReportsChanges::class)) {
-                    $engine->watch($driverName, self::build($driverName));
+            // Events a driver kept before it was set aside still need the guard, and their driver reports to the index
+            $engine->guardIfNeeded(static function (): iterable {
+                foreach (self::DRIVERS as $driverName => $class) {
+                    if ($driverName !== 'wp-cron' && is_subclass_of($class, ReportsChanges::class)) {
+                        yield $driverName => self::build($driverName);
+                    }
                 }
-            }
+            });
 
             return;
         }
@@ -196,6 +197,14 @@ final class Schedule
         } catch (InvalidArgumentException) {
             return null;
         }
+    }
+
+    /**
+     * Whether a driver of this name can be chosen.
+     */
+    public static function knows(string $name): bool
+    {
+        return isset(self::$drivers[$name]) || isset(self::DRIVERS[$name]);
     }
 
     /**

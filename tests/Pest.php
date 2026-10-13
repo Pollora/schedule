@@ -17,6 +17,9 @@ use Pollora\Schedule\Schedule;
 
 pest()->beforeEach(function (): void {
     Monkey\setUp();
+
+    // Once a test defines a WordPress function, it exists for the rest of the process: give it a default
+    Monkey\Functions\when('wp_cache_delete')->justReturn(true);
 })->afterEach(function (): void {
     if ($container = Mockery::getContainer()) {
         $this->addToAssertionCount($container->mockery_getExpectationCount());

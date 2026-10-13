@@ -145,7 +145,7 @@ final class CronIndex
      */
     public static function record(Event $event, string $owner): void
     {
-        $crons = self::read();
+        $crons = self::read(fresh: true);
         $key = self::key($event->args);
         $schedule = $event->recurrence;
         $interval = $event->interval;
@@ -183,7 +183,7 @@ final class CronIndex
      */
     public static function forget(string $hook, array $args, string $owner): void
     {
-        $crons = self::read();
+        $crons = self::read(fresh: true);
 
         if (self::strip($crons, $hook, self::key($args), $owner) !== []) {
             self::write($crons);
@@ -195,7 +195,7 @@ final class CronIndex
      */
     public static function forgetHook(string $hook, string $owner): void
     {
-        $crons = self::read();
+        $crons = self::read(fresh: true);
         $found = false;
 
         foreach ($crons as $timestamp => $hooks) {
@@ -363,10 +363,24 @@ final class CronIndex
     }
 
     /**
+     * The option's entries.
+     *
+     * Without a persistent object cache, the copy of an autoloaded option is the
+     * one taken when the request started: a long request (Action Scheduler's
+     * queue runner) that wrote from it would undo what other requests scheduled
+     * since. A write reads again from the database first, which leaves the
+     * window of the write itself.
+     *
+     * @param  bool  $fresh  Read from the database, before a change
      * @return array<int|string, mixed>
      */
-    private static function read(): array
+    private static function read(bool $fresh = false): array
     {
+        if ($fresh && function_exists('wp_cache_delete')) {
+            wp_cache_delete('alloptions', 'options');
+            wp_cache_delete('cron', 'options');
+        }
+
         $crons = _get_cron_array();
 
         return is_array($crons) ? $crons : [];

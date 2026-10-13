@@ -133,6 +133,72 @@ it('ignores what Action Scheduler reports while the engine is changing it', func
     expect($this->cron)->toBe($entry);
 });
 
+it('schedules an event again when its entry is stale: the driver has no such event', function (): void {
+    $time = time() + 3600;
+    // A mirror of an action that was deleted from Tools › Scheduled Actions
+    $this->cron = [$time => ['reports' => [md5(serialize([])) => ['schedule' => 'daily', 'args' => [], 'interval' => 86400, 'driver' => 'action-scheduler']]]];
+    // What the core answers: it reads the option
+    Functions\when('wp_next_scheduled')->alias(fn (string $hook): int|false => array_key_first(array_filter($this->cron, fn (array $hooks): bool => isset($hooks[$hook]))) ?? false);
+
+    expect($this->engine->next('reports'))->toBeNull()
+        ->and(CronIndex::ownerOf('reports'))->toBeNull();
+
+    $this->cron = [$time => ['reports' => [md5(serialize([])) => ['schedule' => 'daily', 'args' => [], 'interval' => 86400, 'driver' => 'action-scheduler']]]];
+
+    expect($this->engine->schedule(new Event('reports', $time, 'daily')))->toBeTrue()
+        ->and(ActionScheduler_FakeStore::$actions)->toHaveCount(1)
+        ->and(CronIndex::ownerOf('reports'))->toBe('action-scheduler');
+});
+
+it('trusts the index for an event of a driver that cannot answer yet', function (): void {
+    $time = time() + 3600;
+    ActionScheduler::$initialized = false;
+    $this->cron = [$time => ['reports' => [md5(serialize([])) => ['schedule' => 'daily', 'args' => [], 'interval' => 86400, 'driver' => 'action-scheduler']]]];
+
+    expect($this->engine->next('reports'))->toBe($time)
+        ->and(CronIndex::ownerOf('reports'))->toBe('action-scheduler');
+});
+
+it('reads the option again from the database before it changes it', function (): void {
+    $cleared = [];
+    Functions\when('wp_cache_delete')->alias(function (string $key, string $group) use (&$cleared): bool {
+        $cleared[] = $group.'/'.$key;
+
+        return true;
+    });
+
+    CronIndex::record(new Event('job', 1000), 'action-scheduler');
+
+    expect($cleared)->toBe(['options/alloptions', 'options/cron']);
+});
+
+it('reconciles the index once, when the request ends, after an action was deleted', function (): void {
+    $this->shutdown = [];
+    Functions\when('add_action')->alias(function (string $hook, callable $callback): bool {
+        $hook === 'shutdown' ? $this->shutdown[] = $callback : $this->actions[$hook][] = $callback;
+
+        return true;
+    });
+    $engine = new ScheduleEngine;
+    $engine->selectDriver(new ActionSchedulerDriver);
+    CronIndex::record(new Event('gone', time() + 100), 'action-scheduler');
+    as_schedule_single_action(time() + 200, 'unseen', [], ActionSchedulerDriver::GROUP);
+
+    // The last observer is this engine's: the one of the test's own engine was registered before
+    $observer = end($this->actions['action_scheduler_deleted_action']);
+
+    foreach ([1, 2, 3] as $id) {
+        $observer($id);
+    }
+
+    expect($this->shutdown)->toHaveCount(1);
+
+    ($this->shutdown[0])();
+
+    expect(CronIndex::ownerOf('gone'))->toBeNull()
+        ->and(CronIndex::ownerOf('unseen'))->toBe('action-scheduler');
+});
+
 it('rebuilds the index from the driver: adds what it keeps, drops what it does not', function (): void {
     as_schedule_single_action(time() + 100, 'unseen', ['a' => 1], ActionSchedulerDriver::GROUP);
     CronIndex::record(new Event('stale', time() + 50), 'action-scheduler');

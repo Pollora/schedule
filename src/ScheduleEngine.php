@@ -157,6 +157,37 @@ final class ScheduleEngine
     }
 
     /**
+     * With WP-Cron as the driver, hook into WordPress only when another driver still keeps events.
+     *
+     * A site that never left WP-Cron pays nothing: no filter, no watcher on
+     * Action Scheduler's actions. The index tells at init, once the options are readable.
+     *
+     * @param  callable(): iterable<string, ScheduleDriver>  $leftovers  The drivers that may still keep events, by name
+     */
+    public function guardIfNeeded(callable $leftovers): void
+    {
+        $run = function () use ($leftovers): void {
+            if (! CronIndex::hasMarked()) {
+                return;
+            }
+
+            $this->guard();
+
+            foreach ($leftovers() as $name => $driver) {
+                $this->watch($name, $driver);
+            }
+        };
+
+        if (function_exists('did_action') && did_action('init') > 0) {
+            $run();
+
+            return;
+        }
+
+        add_action('init', $run, 0);
+    }
+
+    /**
      * @param  (callable(string): ?ScheduleDriver)|null  $resolver
      */
     public function resolveDriversWith(?callable $resolver): void
@@ -216,6 +247,13 @@ final class ScheduleEngine
     public function refresh(string $name, string $hook, array $args = []): void
     {
         if ($this->busy) {
+            return;
+        }
+
+        if ($hook === '') {
+            // The driver says something changed, not what: reconcile the index with it
+            $this->reindex($name);
+
             return;
         }
 
@@ -480,6 +518,12 @@ final class ScheduleEngine
      */
     public function next(string $hook, array $args = []): ?int
     {
+        $owned = $this->askOwner($hook, $args);
+
+        if ($owned !== null) {
+            return $owned;
+        }
+
         $times = [];
 
         foreach ($this->stores() as $store) {
@@ -491,6 +535,44 @@ final class ScheduleEngine
         $times = array_filter($times, static fn (?int $time): bool => $time !== null);
 
         return $times === [] ? null : min($times);
+    }
+
+    /**
+     * The time of an event the index shows as a driver's, as the driver says it.
+     *
+     * The index is a mirror: an action deleted from Tools › Scheduled Actions, or
+     * a driver that lost the event, would leave an entry that WordPress's own
+     * wp_next_scheduled() keeps believing, and that stops a recurring event from
+     * ever being scheduled again. When the driver has no such event, the entry
+     * goes. A driver that cannot answer yet is trusted with what the index says.
+     *
+     * @param  array<int|string, mixed>  $args
+     */
+    private function askOwner(string $hook, array $args): ?int
+    {
+        $owner = CronIndex::ownerOf($hook, $args);
+
+        if ($owner === null || $owner === CronIndex::WP_CRON) {
+            return null;
+        }
+
+        try {
+            $driver = $this->driverNamed($owner);
+        } catch (ScheduleException) {
+            return null;
+        }
+
+        if ($driver instanceof DefersUntilReady && ! $driver->ready()) {
+            return array_values(array_filter(CronIndex::events($owner), static fn (Event $event): bool => $event->hook === $hook && $event->args === $args))[0]->timestamp ?? null;
+        }
+
+        $time = $driver->next($hook, $args);
+
+        if ($time === null) {
+            CronIndex::forget($hook, $args, $owner);
+        }
+
+        return $time;
     }
 
     /**

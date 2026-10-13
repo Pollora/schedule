@@ -193,17 +193,46 @@ it('reads, cancels and lists in both stores', function (): void {
         ->and($this->engine->next('digest'))->toBeNull();
 });
 
-it('chooses a driver by name, and wp-cron puts WordPress back on its own', function (): void {
+it('chooses a driver by name, and a site that never left WP-Cron hooks into nothing', function (): void {
     Schedule::extend('test', fn (): ScheduleDriver => new ScheduleFake);
     Schedule::driver('test');
 
     expect(Schedule::engine()->driver())->toBeInstanceOf(ScheduleFake::class)
-        ->and($this->filters)->toHaveKey('pre_schedule_event');
+        ->and($this->filters)->toHaveKey('pre_schedule_event')
+        ->and(Schedule::knows('test'))->toBeTrue()
+        ->and(Schedule::knows('nope'))->toBeFalse();
+
+    $this->filters = [];
+    $this->actions = [];
+    Schedule::driver('wp-cron');
+
+    // Nothing marked in the option: the check waits for init, and finds nothing to guard
+    expect($this->filters)->toBe([])
+        ->and(fn () => Schedule::driver('nope'))->toThrow(InvalidArgumentException::class);
+
+    foreach ($this->actions['init'] ?? [] as $callback) {
+        $callback();
+    }
+
+    expect($this->filters)->toBe([])
+        ->and($this->actions)->not->toHaveKey('action_scheduler_stored_action');
+});
+
+it('guards a site back on WP-Cron that another driver still keeps events for, once WordPress has initialised', function (): void {
+    CronIndex::record(new Event('digest', time() + 100), 'action-scheduler');
+    $this->filters = [];
+    $this->actions = [];
 
     Schedule::driver('wp-cron');
 
+    expect($this->filters)->toBe([]);
+
+    foreach ($this->actions['init'] as $callback) {
+        $callback();
+    }
+
     expect(array_keys($this->filters))->toBe(['pre_get_ready_cron_jobs', 'pre_update_option_cron', 'pre_reschedule_event', 'pre_unschedule_event'])
-        ->and(fn () => Schedule::driver('nope'))->toThrow(InvalidArgumentException::class);
+        ->and($this->actions)->toHaveKey('action_scheduler_stored_action');
 });
 
 it('wires the driver chosen before WordPress could take hooks, once it can', function (): void {

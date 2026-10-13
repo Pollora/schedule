@@ -44,6 +44,7 @@ beforeEach(function (): void {
     $this->filters = [];
     $this->fake = new ScheduleFake;
 
+    Functions\when('_get_cron_array')->justReturn([]);
     Functions\when('add_action')->alias(function (string $hook, callable $callback): bool {
         $this->hooks[$hook][] = $callback;
 
