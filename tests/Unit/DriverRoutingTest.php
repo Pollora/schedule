@@ -202,7 +202,7 @@ it('chooses a driver by name, and wp-cron puts WordPress back on its own', funct
 
     Schedule::driver('wp-cron');
 
-    expect(array_keys($this->filters))->toBe(['pre_get_ready_cron_jobs', 'pre_update_option_cron'])
+    expect(array_keys($this->filters))->toBe(['pre_get_ready_cron_jobs', 'pre_update_option_cron', 'pre_reschedule_event', 'pre_unschedule_event'])
         ->and(fn () => Schedule::driver('nope'))->toThrow(InvalidArgumentException::class);
 });
 

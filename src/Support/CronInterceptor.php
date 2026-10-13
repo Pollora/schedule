@@ -27,8 +27,6 @@ final class CronInterceptor
 {
     private const array ROUTING = [
         'pre_schedule_event' => ['scheduleEvent', 3],
-        'pre_reschedule_event' => ['rescheduleEvent', 3],
-        'pre_unschedule_event' => ['unscheduleEvent', 5],
         'pre_clear_scheduled_hook' => ['clearScheduledHook', 4],
         'pre_unschedule_hook' => ['unscheduleHook', 3],
     ];
@@ -36,11 +34,22 @@ final class CronInterceptor
     private const array GUARD = [
         'pre_get_ready_cron_jobs' => ['readyJobs', 1],
         'pre_update_option_cron' => ['updateOption', 3],
+        'pre_reschedule_event' => ['rescheduleEvent', 3],
+        'pre_unschedule_event' => ['unscheduleEvent', 5],
     ];
 
     private bool $installed = false;
 
     private bool $stepsAside = false;
+
+    private bool $routing = true;
+
+    /**
+     * Events a runner rescheduled and has yet to unschedule at their old time, by hook and arguments.
+     *
+     * @var array<string, int>
+     */
+    private array $rescheduled = [];
 
     /**
      * @var array<string, \Closure>
@@ -56,6 +65,7 @@ final class CronInterceptor
         }
 
         $this->installed = true;
+        $this->routing = $routing;
 
         foreach ([...($routing ? self::ROUTING : []), ...self::GUARD] as $filter => [$method, $arguments]) {
             $this->callbacks[$filter] = $this->{$method}(...);
@@ -141,6 +151,11 @@ final class CronInterceptor
     /**
      * Rescheduling is the runner's job: WP-Cron reschedules what it runs, Action Scheduler its recurring actions.
      *
+     * A runner that follows WP-Cron's way (wp cron event run, WP Crontrol)
+     * reschedules the event, then unschedules it at its old time: for an event
+     * another driver keeps, the second step must not cancel what the first said
+     * was kept, so the pair is remembered.
+     *
      * @return bool|\WP_Error|null
      */
     private function rescheduleEvent(mixed $pre, object $event, bool $wpError = false): mixed
@@ -150,6 +165,17 @@ final class CronInterceptor
         }
 
         $args = (array) $event->args;
+        $owner = CronIndex::ownerOf((string) $event->hook, $args);
+
+        if ($owner !== null && $owner !== CronIndex::WP_CRON) {
+            $this->rescheduled[self::identity((string) $event->hook, $args)] = (int) $event->timestamp;
+
+            return true;
+        }
+
+        if (! $this->routing) {
+            return null;
+        }
 
         return $this->engine->driverFor($event->hook, $args) === $this->engine->stores()[1] ? null : true;
     }
@@ -165,8 +191,14 @@ final class CronInterceptor
 
         $owner = CronIndex::ownerOf($hook, $args);
 
-        if ($owner === CronIndex::WP_CRON) {
+        if ($owner === CronIndex::WP_CRON || ($owner === null && ! $this->routing)) {
             return null;
+        }
+
+        if (($this->rescheduled[self::identity($hook, $args)] ?? null) === $timestamp) {
+            unset($this->rescheduled[self::identity($hook, $args)]);
+
+            return true;
         }
 
         if ($owner === null) {
@@ -225,6 +257,14 @@ final class CronInterceptor
         $cancelled = $this->engine->quietly(fn (): int => $this->engine->stores()[0]->clear($hook));
 
         return $this->withCore(static fn () => wp_unschedule_hook($hook, $wpError), max(0, $cancelled - $indexed));
+    }
+
+    /**
+     * @param  array<int|string, mixed>  $args
+     */
+    private static function identity(string $hook, array $args): string
+    {
+        return $hook.'|'.md5(serialize($args));
     }
 
     /**

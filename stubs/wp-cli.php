@@ -45,11 +45,6 @@ namespace {
         {
             return '';
         }
-
-        protected static function run_event(stdClass $event)
-        {
-            return true;
-        }
     }
 }
 

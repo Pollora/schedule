@@ -15,9 +15,8 @@ use WP_CLI\Formatter;
  * It extends the command WP-CLI bundles and takes nothing away: the columns,
  * the filters and the formats it had still work, and `schedule`, `unschedule`
  * and `delete` are the parent's, which go through the core functions the engine
- * already follows. What changes besides the list is `run`: running an event
- * another driver keeps must not reschedule it nor unschedule it, since the
- * driver keeps its own schedule.
+ * already follows: running an event another driver keeps reschedules it and
+ * unschedules the old time, which the engine reads as "it stays".
  */
 class CronEventCommand extends \Cron_Event_Command
 {
@@ -42,6 +41,7 @@ class CronEventCommand extends \Cron_Event_Command
      *   - table
      *   - csv
      *   - ids
+     *   - count
      *   - json
      *   - yaml
      * ---
@@ -115,30 +115,6 @@ class CronEventCommand extends \Cron_Event_Command
         }
 
         $formatter->display_items($events);
-    }
-
-    /**
-     * An event another driver keeps runs by itself: run its hook, and leave its schedule alone.
-     */
-    protected static function run_event(stdClass $event)
-    {
-        $crons = (array) _get_cron_array();
-
-        if (self::driverOf($crons, $event) === CronIndex::WP_CRON) {
-            return parent::run_event($event);
-        }
-
-        if (! defined('DOING_CRON')) {
-            define('DOING_CRON', true);
-        }
-
-        if ($event->schedule === false) {
-            wp_unschedule_event($event->time, $event->hook, $event->args);
-        }
-
-        do_action_ref_array($event->hook, $event->args);
-
-        return true;
     }
 
     /**

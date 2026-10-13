@@ -6,6 +6,7 @@ use Brain\Monkey\Functions;
 use Pollora\Schedule\Drivers\ActionSchedulerDriver;
 use Pollora\Schedule\Event;
 use Pollora\Schedule\ScheduleEngine;
+use Pollora\Schedule\Support\CronIndex;
 use Pollora\Schedule\Testing\ScheduleFake;
 
 require_once __DIR__.'/../Support/ActionSchedulerFake.php';
@@ -52,7 +53,7 @@ beforeEach(function (): void {
 });
 
 it('installs the pre_* filters of the core, and removes them', function (): void {
-    expect(array_keys($this->filters))->toBe(['pre_schedule_event', 'pre_reschedule_event', 'pre_unschedule_event', 'pre_clear_scheduled_hook', 'pre_unschedule_hook', 'pre_get_ready_cron_jobs', 'pre_update_option_cron']);
+    expect(array_keys($this->filters))->toBe(['pre_schedule_event', 'pre_clear_scheduled_hook', 'pre_unschedule_hook', 'pre_get_ready_cron_jobs', 'pre_update_option_cron', 'pre_reschedule_event', 'pre_unschedule_event']);
 
     $this->engine->useDriver(new ScheduleFake);
 
@@ -219,4 +220,20 @@ it('does not take its own writes for somebody else\'s', function (): void {
     expect($before)->not->toBe([])
         ->and($this->cron)->toBe([])
         ->and(array_values(ActionScheduler_FakeStore::$actions)[0]->status)->toBe('canceled');
+});
+
+it('keeps an event another driver keeps when a runner reschedules it and unschedules its old time', function (): void {
+    $time = time() + 600;
+    $this->engine->place(new Event('reports', $time, 'daily'));
+    $event = (object) ['hook' => 'reports', 'timestamp' => $time, 'schedule' => 'daily', 'args' => []];
+
+    // What `wp cron event run` does, in this order
+    expect(($this->filter)('pre_reschedule_event', null, $event, true))->toBeTrue()
+        ->and(($this->filter)('pre_unschedule_event', null, $time, 'reports', [], true))->toBeTrue()
+        ->and($this->engine->next('reports'))->toBe($time)
+        ->and(CronIndex::ownerOf('reports'))->toBe('action-scheduler');
+
+    // An unschedule that no reschedule announced is a real one
+    expect(($this->filter)('pre_unschedule_event', null, $time, 'reports', [], true))->toBeTrue()
+        ->and($this->engine->next('reports'))->toBeNull();
 });

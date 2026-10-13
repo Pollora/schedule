@@ -13,6 +13,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Schedule::driver('action-scheduler')`, or `POLLORA_SCHEDULE_DRIVER`, chooses the driver of the site; `Schedule::extend()` adds one. WordPress's own scheduling functions follow it, for the core, plugins and themes, through the `pre_schedule_event`, `pre_reschedule_event`, `pre_unschedule_event`, `pre_clear_scheduled_hook`, `pre_unschedule_hook` and `pre_get_scheduled_event` filters
 - What stays on WP-Cron: events already in the `cron` option (nothing moves until a migration says so, so a recurring event WP-Cron runs keeps rescheduling itself there), Action Scheduler's own queue runner (`action_scheduler_run_queue`) and the hooks given to `ScheduleEngine::protect()` or the `pollora/schedule/protected_hooks` filter, and every event when the driver is not there
 - Events scheduled before Action Scheduler is ready are kept and given to it on `action_scheduler_init`, once each
+- The `cron` option indexes every event, whoever keeps it: an event another driver keeps is written there with a `driver` key (an entry without it is WP-Cron's own), so `wp_next_scheduled()`, Site Health, WP Crontrol and Query Monitor see it without a query to the driver. The engine writes the entry when it schedules and cancels, and Action Scheduler's own reports (stored, completed, failed, cancelled) keep it current
+- WP-Cron never runs an event another driver keeps (`pre_get_ready_cron_jobs`), and a direct write to the option that removes or moves such an entry reaches its driver (`pre_update_option_cron`). Running an event with `wp cron event run`, which reschedules and then unschedules the old time, leaves it scheduled
+- `Migrator`, `ScheduleEngine::reindex()`: move pending events from one driver to another, in both directions and safe to run again (the event is created in the target before it leaves the source), keeping a recurring event's own interval; `--dry-run` shows what would move. Hooks the driver protects stay on WP-Cron
+- WP-CLI: `wp cron event list` gains `type` (`once` or `recurring`) and `driver` and their filters, extending the command WP-CLI bundles without removing anything; `wp pollora schedule migrate [--from=] [--to=] [--dry-run]`
+- `Schedule::boot()`: an application that starts before WordPress chooses the driver at once, and the engine hooks into WordPress as soon as `add_filter()` exists
+- `Contracts\ReportsChanges`, for a driver that runs its own events and tells when one ran, failed or was cancelled; `Event::$driver`
+
+### Changed
+
+- `pre_get_scheduled_event` is no longer filtered: the index answers `wp_get_scheduled_event()` natively
 
 ## [0.1.0] - 2026-10-13
 
