@@ -6,6 +6,7 @@ namespace Pollora\Schedule\Drivers;
 
 use Closure;
 use Pollora\Schedule\Contracts\DefersUntilReady;
+use Pollora\Schedule\Contracts\Enqueues;
 use Pollora\Schedule\Contracts\FindsEvent;
 use Pollora\Schedule\Contracts\ReportsChanges;
 use Pollora\Schedule\Contracts\ScheduleDriver;
@@ -21,14 +22,22 @@ use Pollora\Schedule\Exceptions\ScheduleException;
  * own and is only looked up in that group, so cancelling a hook never reaches
  * the actions WooCommerce or another plugin keeps on the same hook.
  */
-final class ActionSchedulerDriver implements DefersUntilReady, FindsEvent, ReportsChanges, ScheduleDriver
+final class ActionSchedulerDriver implements DefersUntilReady, Enqueues, FindsEvent, ReportsChanges, ScheduleDriver
 {
+    /**
+     * The group of the engine's events: the only one the 'cron' index follows.
+     */
     public const string GROUP = 'pollora/schedule';
 
     /**
      * Window, in seconds, in which an identical single event is a duplicate: WordPress's own.
      */
     public const int DUPLICATE_WINDOW = 600;
+
+    /**
+     * @param  string  $group  Where the actions live. Another group keeps them out of the 'cron' index, which follows the default one only: for work another package queues and tracks itself
+     */
+    public function __construct(private readonly string $group = self::GROUP) {}
 
     public function available(): bool
     {
@@ -84,13 +93,29 @@ final class ActionSchedulerDriver implements DefersUntilReady, FindsEvent, Repor
         }
     }
 
+    /**
+     * Store an action as it is, with no look at what is already there.
+     *
+     * An action due now or earlier is an async action: Action Scheduler runs it as soon as a queue runner is free.
+     */
+    public function enqueue(string $hook, int $timestamp, array $args = []): void
+    {
+        $id = $timestamp <= time()
+            ? (function_exists('as_enqueue_async_action') ? as_enqueue_async_action($hook, $args, $this->group) : as_schedule_single_action(time(), $hook, $args, $this->group))
+            : as_schedule_single_action($timestamp, $hook, $args, $this->group);
+
+        if ((int) $id === 0) {
+            throw new ScheduleException(sprintf("Action Scheduler: the event '%s' could not be scheduled.", $hook));
+        }
+    }
+
     public function once(string $hook, int $timestamp, array $args = []): bool
     {
         if ($this->hasDuplicate($hook, $timestamp, $args)) {
             return false;
         }
 
-        if ((int) as_schedule_single_action($timestamp, $hook, $args, self::GROUP) === 0) {
+        if ((int) as_schedule_single_action($timestamp, $hook, $args, $this->group) === 0) {
             throw new ScheduleException(sprintf("Action Scheduler: the event '%s' could not be scheduled.", $hook));
         }
 
@@ -105,7 +130,7 @@ final class ActionSchedulerDriver implements DefersUntilReady, FindsEvent, Repor
             throw new ScheduleException(sprintf("Action Scheduler: the event '%s' has no known recurrence '%s'.", $hook, $recurrence));
         }
 
-        if ((int) as_schedule_recurring_action($timestamp, $interval, $hook, $args, self::GROUP) === 0) {
+        if ((int) as_schedule_recurring_action($timestamp, $interval, $hook, $args, $this->group) === 0) {
             throw new ScheduleException(sprintf("Action Scheduler: the event '%s' could not be scheduled.", $hook));
         }
 
@@ -124,7 +149,7 @@ final class ActionSchedulerDriver implements DefersUntilReady, FindsEvent, Repor
 
     public function next(string $hook, array $args = []): ?int
     {
-        $next = as_next_scheduled_action($hook, $args, self::GROUP);
+        $next = as_next_scheduled_action($hook, $args, $this->group);
 
         if ($next === true) {
             // Running, or waiting with no date: due now
@@ -160,7 +185,7 @@ final class ActionSchedulerDriver implements DefersUntilReady, FindsEvent, Repor
 
         $action = \ActionScheduler::store()->fetch_action((string) $id);
 
-        return is_object($action) && method_exists($action, 'get_group') && $action->get_group() === self::GROUP ? $action : null;
+        return is_object($action) && method_exists($action, 'get_group') && $action->get_group() === $this->group ? $action : null;
     }
 
     /**
@@ -171,7 +196,7 @@ final class ActionSchedulerDriver implements DefersUntilReady, FindsEvent, Repor
      */
     private function pending(?string $hook = null, ?array $args = null): array
     {
-        $query = ['group' => self::GROUP, 'status' => \ActionScheduler_Store::STATUS_PENDING, 'per_page' => -1, 'orderby' => 'date', 'order' => 'ASC'];
+        $query = ['group' => $this->group, 'status' => \ActionScheduler_Store::STATUS_PENDING, 'per_page' => -1, 'orderby' => 'date', 'order' => 'ASC'];
 
         if ($hook !== null) {
             $query['hook'] = $hook;

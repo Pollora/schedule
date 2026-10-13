@@ -69,6 +69,10 @@ A driver is where events are kept and who runs them. `WpCronDriver` is the defau
 
 Another driver implements `Pollora\Schedule\Contracts\ScheduleDriver` and is given to the engine with `Schedule::useDriver()`.
 
+## Work another package queues
+
+`new ActionSchedulerDriver('my-group')` keeps its actions in a group of its own, which the `cron` index below never follows. `enqueue($hook, $timestamp, $args)` stores an action as it is, with no duplicate check, and queues an async action when the time is now: for a caller that gives each event an identifier and queues many.
+
 ## The `cron` option as an index
 
 Whatever the driver, the `cron` option lists every scheduled event. An event another driver keeps carries a `driver` key next to `schedule` and `args`; an entry without it is WP-Cron's. WordPress reads the option without a query, so `wp_next_scheduled()`, Site Health, WP Crontrol, Query Monitor and `wp cron event list` all see the event, and WP-Cron never runs one it does not own.
