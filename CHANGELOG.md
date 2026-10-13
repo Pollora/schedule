@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-10-13
 What a driver with no store of its own (a queue of deferred jobs) needs. `ScheduleDriver` is unchanged.
 
 ### Fixed
