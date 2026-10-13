@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Pollora\Schedule\Infrastructure\Services;
 
-use Illuminate\Support\Str;
 use InvalidArgumentException;
 use Pollora\Attributes\Schedule;
 use Pollora\Discovery\Domain\Contracts\DiscoveryInterface;
@@ -162,10 +161,25 @@ final class ScheduleDiscovery implements DiscoveryInterface
     private function generateHookName(string $className, string $methodName): string
     {
         // Extract just the class name without namespace
-        $shortClassName = class_basename($className);
+        $shortClassName = basename(str_replace('\\', '/', $className));
 
         // Convert to snake_case following WordPress conventions
-        return Str::snake($shortClassName).'_'.Str::snake($methodName);
+        return $this->snake($shortClassName).'_'.$this->snake($methodName);
+    }
+
+    /**
+     * The value in snake case, as Laravel's Str::snake() writes it: hooks
+     * already scheduled under a derived name keep that name.
+     */
+    private function snake(string $value): string
+    {
+        if (ctype_lower($value)) {
+            return $value;
+        }
+
+        $value = (string) preg_replace('/\s+/u', '', ucwords($value));
+
+        return mb_strtolower((string) preg_replace('/(.)(?=[A-Z])/u', '$1_', $value), 'UTF-8');
     }
 
     /**
