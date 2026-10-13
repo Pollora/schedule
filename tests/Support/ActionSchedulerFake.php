@@ -46,6 +46,11 @@ final class FakeAction
     {
         return $this->schedule;
     }
+
+    public function get_group(): string
+    {
+        return $this->group;
+    }
 }
 
 abstract class ActionScheduler_Store
@@ -57,6 +62,8 @@ abstract class ActionScheduler_Store
     public const STATUS_CANCELED = 'canceled';
 
     abstract public function cancel_action($action_id);
+
+    abstract public function fetch_action($action_id);
 }
 
 final class ActionScheduler_FakeStore extends ActionScheduler_Store
@@ -69,6 +76,11 @@ final class ActionScheduler_FakeStore extends ActionScheduler_Store
     public function cancel_action($action_id): void
     {
         self::$actions[$action_id]->status = self::STATUS_CANCELED;
+    }
+
+    public function fetch_action($action_id): ?FakeAction
+    {
+        return self::$actions[(int) $action_id] ?? null;
     }
 }
 

@@ -83,7 +83,7 @@ it('lists the events of the cron array, soonest first', function (): void {
     ]);
 
     expect((new WpCronDriver)->events())->toEqual([
-        new Event('digest', 1000, null, ['user' => 1]),
-        new Event('reports', 2000, 'daily', [], 86400),
+        new Event('digest', 1000, null, ['user' => 1], null, 'wp-cron'),
+        new Event('reports', 2000, 'daily', [], 86400, 'wp-cron'),
     ]);
 });

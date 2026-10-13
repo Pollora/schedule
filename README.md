@@ -69,6 +69,26 @@ A driver is where events are kept and who runs them. `WpCronDriver` is the defau
 
 Another driver implements `Pollora\Schedule\Contracts\ScheduleDriver` and is given to the engine with `Schedule::useDriver()`.
 
+## The `cron` option as an index
+
+Whatever the driver, the `cron` option lists every scheduled event. An event another driver keeps carries a `driver` key next to `schedule` and `args`; an entry without it is WP-Cron's. WordPress reads the option without a query, so `wp_next_scheduled()`, Site Health, WP Crontrol, Query Monitor and `wp cron event list` all see the event, and WP-Cron never runs one it does not own.
+
+A plugin that rewrites the whole array still works: removing or moving an entry reaches the driver that keeps it.
+
+## Changing driver
+
+Setting `Schedule::driver('action-scheduler')` (or `POLLORA_SCHEDULE_DRIVER`) sends new events to Action Scheduler; what WP-Cron holds stays there until you move it:
+
+```bash
+wp pollora schedule migrate --to=action-scheduler --dry-run
+wp pollora schedule migrate --from=wp-cron --to=action-scheduler
+wp pollora schedule migrate --from=action-scheduler --to=wp-cron   # and back
+```
+
+An event is created in the target before it leaves the source, so a crash duplicates it instead of losing it, and running the command again does not create it twice. A recurring event keeps the interval its entry stores. Hooks the driver protects stay on WP-Cron.
+
+`wp cron event list` shows the type and the driver of each event, and takes `--type=once|recurring` and `--driver=<name>` like its other filters.
+
 ## Testing
 
 ```php

@@ -8,6 +8,7 @@ use Pollora\Schedule\Drivers\ActionSchedulerDriver;
 use Pollora\Schedule\Event;
 use Pollora\Schedule\Schedule;
 use Pollora\Schedule\ScheduleEngine;
+use Pollora\Schedule\Support\CronIndex;
 use Pollora\Schedule\Testing\ScheduleFake;
 
 require_once __DIR__.'/../Support/ActionSchedulerFake.php';
@@ -35,6 +36,11 @@ beforeEach(function (): void {
     });
     Functions\when('wp_get_schedules')->justReturn(['daily' => ['interval' => 86400, 'display' => 'Once Daily']]);
     Functions\when('_get_cron_array')->alias(fn (): array => $this->cron);
+    Functions\when('_set_cron_array')->alias(function (array $cron): bool {
+        $this->cron = $cron;
+
+        return true;
+    });
     // WP-Cron, as the engine's fallback reaches it
     Functions\when('wp_schedule_single_event')->alias(function (int $ts, string $hook, array $args): bool {
         $this->wpCron[] = ['once', $hook, $ts, $args];
@@ -59,6 +65,7 @@ it('sends a new event to the chosen driver', function (): void {
     $this->engine->schedule(new Event('reports', time() + 100, 'daily'));
 
     expect($this->wpCron)->toBe([])
+        ->and(array_column(CronIndex::events('action-scheduler'), 'hook'))->toEqualCanonicalizing(['digest', 'reports'])
         ->and(ActionScheduler_FakeStore::$actions)->toHaveCount(2)
         ->and($this->engine->next('digest', ['u' => 1]))->not->toBeNull();
 });
@@ -186,15 +193,62 @@ it('reads, cancels and lists in both stores', function (): void {
         ->and($this->engine->next('digest'))->toBeNull();
 });
 
-it('chooses a driver by name, and wp-cron puts WordPress back on its own', function (): void {
+it('chooses a driver by name, and a site that never left WP-Cron hooks into nothing', function (): void {
     Schedule::extend('test', fn (): ScheduleDriver => new ScheduleFake);
     Schedule::driver('test');
 
     expect(Schedule::engine()->driver())->toBeInstanceOf(ScheduleFake::class)
-        ->and($this->filters)->toHaveKey('pre_schedule_event');
+        ->and($this->filters)->toHaveKey('pre_schedule_event')
+        ->and(Schedule::knows('test'))->toBeTrue()
+        ->and(Schedule::knows('nope'))->toBeFalse();
+
+    $this->filters = [];
+    $this->actions = [];
+    Schedule::driver('wp-cron');
+
+    // Nothing marked in the option: the check waits for init, and finds nothing to guard
+    expect($this->filters)->toBe([])
+        ->and(fn () => Schedule::driver('nope'))->toThrow(InvalidArgumentException::class);
+
+    foreach ($this->actions['init'] ?? [] as $callback) {
+        $callback();
+    }
+
+    expect($this->filters)->toBe([])
+        ->and($this->actions)->not->toHaveKey('action_scheduler_stored_action');
+});
+
+it('guards a site back on WP-Cron that another driver still keeps events for, once WordPress has initialised', function (): void {
+    CronIndex::record(new Event('digest', time() + 100), 'action-scheduler');
+    $this->filters = [];
+    $this->actions = [];
 
     Schedule::driver('wp-cron');
 
-    expect($this->filters)->toBe([])
-        ->and(fn () => Schedule::driver('nope'))->toThrow(InvalidArgumentException::class);
+    expect($this->filters)->toBe([]);
+
+    foreach ($this->actions['init'] as $callback) {
+        $callback();
+    }
+
+    expect(array_keys($this->filters))->toBe(['pre_get_ready_cron_jobs', 'pre_update_option_cron', 'pre_reschedule_event', 'pre_unschedule_event'])
+        ->and($this->actions)->toHaveKey('action_scheduler_stored_action');
+});
+
+it('wires the driver chosen before WordPress could take hooks, once it can', function (): void {
+    // The application chose it at its own start: Schedule::driver() only noted the name
+    $this->filters = [];
+    (new ReflectionClass(Schedule::class))->setStaticPropertyValue('wanted', 'action-scheduler');
+
+    expect($this->filters)->toBe([]);
+
+    Schedule::boot();
+
+    expect(Schedule::engine()->driverName())->toBe('action-scheduler')
+        ->and($this->filters)->toHaveKey('pre_schedule_event');
+
+    $filters = $this->filters;
+    Schedule::boot();
+
+    expect($this->filters)->toBe($filters);
 });

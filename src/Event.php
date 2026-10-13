@@ -16,6 +16,7 @@ final readonly class Event
      * @param  string|null  $recurrence  Key of the WordPress schedule, null for a single event
      * @param  array<int|string, mixed>  $args  Arguments the hook receives
      * @param  int|null  $interval  Seconds between two runs, null for a single event
+     * @param  string|null  $driver  Name of the driver that keeps the event, known when it comes from the index
      */
     public function __construct(
         public string $hook,
@@ -23,6 +24,7 @@ final readonly class Event
         public ?string $recurrence = null,
         public array $args = [],
         public ?int $interval = null,
+        public ?string $driver = null,
     ) {}
 
     public function isRecurring(): bool

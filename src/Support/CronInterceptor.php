@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Pollora\Schedule\Support;
 
-use Pollora\Schedule\Contracts\FindsEvent;
 use Pollora\Schedule\Event;
+use Pollora\Schedule\Exceptions\ScheduleException;
 use Pollora\Schedule\ScheduleEngine;
 
 /**
@@ -13,25 +13,43 @@ use Pollora\Schedule\ScheduleEngine;
  * 'pre_*' filters of wp-includes/cron.php, so the core, plugins and themes
  * that call wp_schedule_event() need no change.
  *
- * Routing is the engine's: what is already in the 'cron' option stays on
- * WP-Cron (the filter returns null and the core carries on), what is new goes
- * to the driver. The interceptor never calls WP-Cron's own driver, and where it
- * has to call a core function again it raises a flag so its own filters step aside.
+ * Routing is the engine's, from the 'cron' option, which indexes every event
+ * with the driver that keeps it: an event WP-Cron keeps stays on it (the filter
+ * returns null and the core carries on), what is new goes to the chosen driver.
+ * The interceptor never calls WP-Cron's own driver, and where it has to call a
+ * core function again it raises a flag so its own filters step aside.
+ *
+ * Two filters are not about routing and stay whatever the driver: WP-Cron never
+ * runs an event another driver keeps, and a direct write to the option reaches
+ * the driver of the events it changes.
  */
 final class CronInterceptor
 {
-    private const array FILTERS = [
+    private const array ROUTING = [
         'pre_schedule_event' => ['scheduleEvent', 3],
-        'pre_reschedule_event' => ['rescheduleEvent', 3],
-        'pre_unschedule_event' => ['unscheduleEvent', 5],
         'pre_clear_scheduled_hook' => ['clearScheduledHook', 4],
         'pre_unschedule_hook' => ['unscheduleHook', 3],
-        'pre_get_scheduled_event' => ['getScheduledEvent', 4],
+    ];
+
+    private const array GUARD = [
+        'pre_get_ready_cron_jobs' => ['readyJobs', 1],
+        'pre_update_option_cron' => ['updateOption', 3],
+        'pre_reschedule_event' => ['rescheduleEvent', 3],
+        'pre_unschedule_event' => ['unscheduleEvent', 5],
     ];
 
     private bool $installed = false;
 
     private bool $stepsAside = false;
+
+    private bool $routing = true;
+
+    /**
+     * Events a runner rescheduled and has yet to unschedule at their old time, by hook and arguments.
+     *
+     * @var array<string, int>
+     */
+    private array $rescheduled = [];
 
     /**
      * @var array<string, \Closure>
@@ -40,15 +58,16 @@ final class CronInterceptor
 
     public function __construct(private readonly ScheduleEngine $engine) {}
 
-    public function install(): void
+    public function install(bool $routing = true): void
     {
         if ($this->installed) {
             return;
         }
 
         $this->installed = true;
+        $this->routing = $routing;
 
-        foreach (self::FILTERS as $filter => [$method, $arguments]) {
+        foreach ([...($routing ? self::ROUTING : []), ...self::GUARD] as $filter => [$method, $arguments]) {
             $this->callbacks[$filter] = $this->{$method}(...);
             add_filter($filter, $this->callbacks[$filter], 10, $arguments);
         }
@@ -62,6 +81,36 @@ final class CronInterceptor
 
         $this->callbacks = [];
         $this->installed = false;
+    }
+
+    /**
+     * What WP-Cron may run: not the events another driver keeps.
+     *
+     * @return array<int, mixed>|null
+     */
+    private function readyJobs(mixed $pre): mixed
+    {
+        return $pre ?? CronIndex::ready();
+    }
+
+    /**
+     * A direct write to the option (a plugin that rebuilds the array, WP Crontrol) changes events a driver keeps: the driver follows.
+     *
+     * @return mixed The value, untouched
+     */
+    private function updateOption(mixed $value, mixed $old = null, mixed $option = null): mixed
+    {
+        if (CronIndex::writing() || ! is_array($value) || ! is_array($old)) {
+            return $value;
+        }
+
+        $changes = CronIndex::changes($old, $value);
+
+        if ($changes['removed'] !== [] || $changes['moved'] !== []) {
+            $this->engine->applyChanges($changes);
+        }
+
+        return $value;
     }
 
     /**
@@ -102,6 +151,11 @@ final class CronInterceptor
     /**
      * Rescheduling is the runner's job: WP-Cron reschedules what it runs, Action Scheduler its recurring actions.
      *
+     * A runner that follows WP-Cron's way (wp cron event run, WP Crontrol)
+     * reschedules the event, then unschedules it at its old time: for an event
+     * another driver keeps, the second step must not cancel what the first said
+     * was kept, so the pair is remembered.
+     *
      * @return bool|\WP_Error|null
      */
     private function rescheduleEvent(mixed $pre, object $event, bool $wpError = false): mixed
@@ -111,6 +165,17 @@ final class CronInterceptor
         }
 
         $args = (array) $event->args;
+        $owner = CronIndex::ownerOf((string) $event->hook, $args);
+
+        if ($owner !== null && $owner !== CronIndex::WP_CRON) {
+            $this->rescheduled[self::identity((string) $event->hook, $args)] = (int) $event->timestamp;
+
+            return true;
+        }
+
+        if (! $this->routing) {
+            return null;
+        }
 
         return $this->engine->driverFor($event->hook, $args) === $this->engine->stores()[1] ? null : true;
     }
@@ -124,13 +189,42 @@ final class CronInterceptor
             return $pre;
         }
 
-        $driver = $this->engine->stores()[0];
+        $owner = CronIndex::ownerOf($hook, $args);
 
-        if ($this->engine->inCronOption($hook, $args) || $driver->next($hook, $args) !== $timestamp) {
+        if ($owner === CronIndex::WP_CRON || ($owner === null && ! $this->routing)) {
             return null;
         }
 
-        $driver->cancel($hook, $args);
+        if (($this->rescheduled[self::identity($hook, $args)] ?? null) === $timestamp) {
+            unset($this->rescheduled[self::identity($hook, $args)]);
+
+            return true;
+        }
+
+        if ($owner === null) {
+            // Not in the index: an event the chosen driver holds without having written it
+            $driver = $this->engine->stores()[0];
+
+            if ($driver->next($hook, $args) !== $timestamp) {
+                return null;
+            }
+
+            $driver->cancel($hook, $args);
+
+            return true;
+        }
+
+        $indexed = array_filter(CronIndex::events($owner), static fn (Event $event): bool => $event->hook === $hook && $event->args === $args && $event->timestamp === $timestamp);
+
+        if ($indexed === []) {
+            return null;
+        }
+
+        try {
+            $this->engine->cancelOwned($owner, $hook, $args);
+        } catch (ScheduleException) {
+            return null;
+        }
 
         return true;
     }
@@ -144,9 +238,10 @@ final class CronInterceptor
             return $pre;
         }
 
-        $cancelled = $this->engine->stores()[0]->cancel($hook, $args);
+        $indexed = CronIndex::countMarked($hook, $args);
+        $cancelled = $this->engine->quietly(fn (): int => $this->engine->stores()[0]->cancel($hook, $args));
 
-        return $this->withCore(static fn () => wp_clear_scheduled_hook($hook, $args, $wpError), $cancelled);
+        return $this->withCore(static fn () => wp_clear_scheduled_hook($hook, $args, $wpError), max(0, $cancelled - $indexed));
     }
 
     /**
@@ -158,41 +253,22 @@ final class CronInterceptor
             return $pre;
         }
 
-        $cancelled = $this->engine->stores()[0]->clear($hook);
+        $indexed = CronIndex::countMarked($hook);
+        $cancelled = $this->engine->quietly(fn (): int => $this->engine->stores()[0]->clear($hook));
 
-        return $this->withCore(static fn () => wp_unschedule_hook($hook, $wpError), $cancelled);
+        return $this->withCore(static fn () => wp_unschedule_hook($hook, $wpError), max(0, $cancelled - $indexed));
     }
 
     /**
-     * An event in the 'cron' option is the core's to describe; null, not false, when the driver has none, or the core would never read the option.
-     *
-     * @return object|null
+     * @param  array<int|string, mixed>  $args
      */
-    private function getScheduledEvent(mixed $pre, string $hook, array $args, mixed $timestamp = null): mixed
+    private static function identity(string $hook, array $args): string
     {
-        $driver = $this->engine->stores()[0];
-
-        if ($pre !== null || $this->stepsAside || ! $driver instanceof FindsEvent || $this->engine->inCronOption($hook, $args)) {
-            return $pre;
-        }
-
-        $found = $driver->find($hook, $args);
-
-        if (! $found instanceof Event || ($timestamp !== null && (int) $timestamp !== $found->timestamp)) {
-            return null;
-        }
-
-        $event = (object) ['hook' => $found->hook, 'timestamp' => $found->timestamp, 'schedule' => $found->recurrence ?? false, 'args' => $found->args];
-
-        if ($found->interval !== null) {
-            $event->interval = $found->interval;
-        }
-
-        return $event;
+        return $hook.'|'.md5(serialize($args));
     }
 
     /**
-     * Run the core function for what is in the 'cron' option and add what the driver cancelled.
+     * Run the core function for what is in the 'cron' option and add what the driver cancelled and the option does not show.
      */
     private function withCore(\Closure $core, int $cancelled): mixed
     {

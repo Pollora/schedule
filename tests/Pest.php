@@ -17,6 +17,9 @@ use Pollora\Schedule\Schedule;
 
 pest()->beforeEach(function (): void {
     Monkey\setUp();
+
+    // Once a test defines a WordPress function, it exists for the rest of the process: give it a default
+    Monkey\Functions\when('wp_cache_delete')->justReturn(true);
 })->afterEach(function (): void {
     if ($container = Mockery::getContainer()) {
         $this->addToAssertionCount($container->mockery_getExpectationCount());
@@ -24,7 +27,7 @@ pest()->beforeEach(function (): void {
 
     // Schedule keeps one engine for the process: start each test from the default one
     $schedule = new ReflectionClass(Schedule::class);
-    foreach (['engine', 'fake', 'driverBeforeFake'] as $property) {
+    foreach (['engine', 'fake', 'driverBeforeFake', 'wanted'] as $property) {
         $schedule->setStaticPropertyValue($property, null);
     }
 

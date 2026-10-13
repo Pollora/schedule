@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Pollora\Schedule\Drivers;
 
 use Pollora\Schedule\Contracts\ScheduleDriver;
-use Pollora\Schedule\Event;
 use Pollora\Schedule\Exceptions\ScheduleException;
+use Pollora\Schedule\Support\CronIndex;
 
 /**
  * Schedules through WP-Cron.
@@ -65,31 +65,12 @@ final class WpCronDriver implements ScheduleDriver
         return $next === false ? null : (int) $next;
     }
 
+    /**
+     * The events WP-Cron keeps: those of the 'cron' option that no other driver claims.
+     */
     public function events(): array
     {
-        $events = [];
-
-        foreach ((array) _get_cron_array() as $timestamp => $hooks) {
-            if (! is_array($hooks)) {
-                continue;
-            }
-
-            foreach ($hooks as $hook => $entries) {
-                foreach ((array) $entries as $entry) {
-                    $events[] = new Event(
-                        hook: (string) $hook,
-                        timestamp: (int) $timestamp,
-                        recurrence: ! empty($entry['schedule']) ? (string) $entry['schedule'] : null,
-                        args: (array) ($entry['args'] ?? []),
-                        interval: isset($entry['interval']) ? (int) $entry['interval'] : null,
-                    );
-                }
-            }
-        }
-
-        usort($events, static fn (Event $a, Event $b): int => $a->timestamp <=> $b->timestamp);
-
-        return $events;
+        return CronIndex::events(CronIndex::WP_CRON);
     }
 
     /**

@@ -6,8 +6,13 @@ namespace Pollora\Schedule;
 
 use Closure;
 use Pollora\Schedule\Contracts\DefersUntilReady;
+use Pollora\Schedule\Contracts\FindsEvent;
+use Pollora\Schedule\Contracts\ReportsChanges;
 use Pollora\Schedule\Contracts\ScheduleDriver;
+use Pollora\Schedule\Drivers\ActionSchedulerDriver;
 use Pollora\Schedule\Drivers\WpCronDriver;
+use Pollora\Schedule\Exceptions\ScheduleException;
+use Pollora\Schedule\Support\CronIndex;
 use Pollora\Schedule\Support\CronInterceptor;
 use Psr\Container\ContainerInterface;
 use Psr\Container\NotFoundExceptionInterface;
@@ -29,6 +34,16 @@ final class ScheduleEngine
      */
     public const array PROTECTED_HOOKS = ['action_scheduler_run_queue'];
 
+    /**
+     * Names of the drivers that come with the package, which the index writes next to the events they keep.
+     *
+     * @var array<class-string<ScheduleDriver>, string>
+     */
+    public const array NAMES = [
+        WpCronDriver::class => CronIndex::WP_CRON,
+        ActionSchedulerDriver::class => 'action-scheduler',
+    ];
+
     private ScheduleDriver $driver;
 
     /**
@@ -36,7 +51,31 @@ final class ScheduleEngine
      */
     private ?ScheduleDriver $fallback = null;
 
+    private string $driverName = CronIndex::WP_CRON;
+
     private ?CronInterceptor $interceptor = null;
+
+    /**
+     * Builds a driver from its name, for events a driver other than the chosen one still keeps.
+     *
+     * @var (Closure(string): ?ScheduleDriver)|null
+     */
+    private ?Closure $resolver = null;
+
+    /**
+     * @var array<string, ScheduleDriver>
+     */
+    private array $named = [];
+
+    /**
+     * @var array<string, true>
+     */
+    private array $watched = [];
+
+    /**
+     * Set while the engine changes a driver's events: what the driver reports then is the engine's own doing.
+     */
+    private bool $busy = false;
 
     /**
      * @var list<string>
@@ -76,12 +115,14 @@ final class ScheduleEngine
     /**
      * Use a driver as the only place events are kept.
      */
-    public function useDriver(ScheduleDriver $driver): void
+    public function useDriver(ScheduleDriver $driver, ?string $name = null): void
     {
         $this->interceptor?->uninstall();
         $this->interceptor = null;
         $this->fallback = null;
         $this->driver = $driver;
+        $this->driverName = $name ?? self::NAMES[$driver::class] ?? $driver::class;
+        $this->named = [];
     }
 
     /**
@@ -90,14 +131,189 @@ final class ScheduleEngine
      * Events already in the 'cron' option stay there, and WP-Cron keeps running
      * them: nothing moves until a migration says so. A call to wp_schedule_event()
      * by the core, a plugin or a theme reaches the driver through the 'pre_*'
-     * filters of wp-includes/cron.php.
+     * filters of wp-includes/cron.php. Each event the driver keeps is written to
+     * the 'cron' option too, marked with the driver's name.
      */
-    public function selectDriver(ScheduleDriver $driver): void
+    public function selectDriver(ScheduleDriver $driver, ?string $name = null): void
     {
-        $this->useDriver($driver);
+        $this->useDriver($driver, $name);
         $this->fallback = new WpCronDriver;
         $this->interceptor = new CronInterceptor($this);
         $this->interceptor->install();
+        $this->watch($this->driverName, $driver);
+    }
+
+    /**
+     * With WP-Cron as the driver: leave the events another driver still keeps to it.
+     *
+     * WP-Cron does not run an event of the index that is not its own, and a
+     * change made to such an event in the option reaches its driver.
+     */
+    public function guard(): void
+    {
+        $this->interceptor?->uninstall();
+        $this->interceptor = new CronInterceptor($this);
+        $this->interceptor->install(routing: false);
+    }
+
+    /**
+     * With WP-Cron as the driver, hook into WordPress only when another driver still keeps events.
+     *
+     * A site that never left WP-Cron pays nothing: no filter, no watcher on
+     * Action Scheduler's actions. The index tells at init, once the options are readable.
+     *
+     * @param  callable(): iterable<string, ScheduleDriver>  $leftovers  The drivers that may still keep events, by name
+     */
+    public function guardIfNeeded(callable $leftovers): void
+    {
+        $run = function () use ($leftovers): void {
+            if (! CronIndex::hasMarked()) {
+                return;
+            }
+
+            $this->guard();
+
+            foreach ($leftovers() as $name => $driver) {
+                $this->watch($name, $driver);
+            }
+        };
+
+        if (function_exists('did_action') && did_action('init') > 0) {
+            $run();
+
+            return;
+        }
+
+        add_action('init', $run, 0);
+    }
+
+    /**
+     * @param  (callable(string): ?ScheduleDriver)|null  $resolver
+     */
+    public function resolveDriversWith(?callable $resolver): void
+    {
+        $this->resolver = $resolver === null ? null : Closure::fromCallable($resolver);
+    }
+
+    public function driverName(): string
+    {
+        return $this->driverName;
+    }
+
+    /**
+     * The driver of this name: the chosen one, WP-Cron, or one built on demand.
+     *
+     * @throws ScheduleException When no driver has this name
+     */
+    public function driverNamed(string $name): ScheduleDriver
+    {
+        if ($name === CronIndex::WP_CRON) {
+            return $this->fallback ?? ($this->driver instanceof WpCronDriver ? $this->driver : ($this->named[$name] ??= new WpCronDriver));
+        }
+
+        if ($name === $this->driverName) {
+            return $this->driver;
+        }
+
+        $driver = $this->named[$name] ?? ($this->resolver instanceof Closure ? ($this->resolver)($name) : null);
+
+        if (! $driver instanceof ScheduleDriver) {
+            throw new ScheduleException(sprintf("No schedule driver is named '%s'.", $name));
+        }
+
+        $this->watch($name, $driver);
+
+        return $this->named[$name] = $driver;
+    }
+
+    /**
+     * Keep the index in step with a driver that runs its own events.
+     */
+    public function watch(string $name, ScheduleDriver $driver): void
+    {
+        if (! $driver instanceof ReportsChanges || isset($this->watched[$name])) {
+            return;
+        }
+
+        $this->watched[$name] = true;
+        $driver->observe(fn (string $hook, array $args) => $this->refresh($name, $hook, $args));
+    }
+
+    /**
+     * Write to the index what a driver says about an event, or take the event out of it.
+     *
+     * @param  array<int|string, mixed>  $args
+     */
+    public function refresh(string $name, string $hook, array $args = []): void
+    {
+        if ($this->busy) {
+            return;
+        }
+
+        if ($hook === '') {
+            // The driver says something changed, not what: reconcile the index with it
+            $this->reindex($name);
+
+            return;
+        }
+
+        try {
+            $driver = $this->driverNamed($name);
+        } catch (ScheduleException) {
+            return;
+        }
+
+        $found = $driver instanceof FindsEvent ? $driver->find($hook, $args) : null;
+
+        if ($found instanceof Event) {
+            CronIndex::record($found, $name);
+
+            return;
+        }
+
+        CronIndex::forget($hook, $args, $name);
+    }
+
+    /**
+     * Rebuild the index from a driver: what it keeps is written, what the index claims it keeps and it does not is taken out.
+     *
+     * @return int Number of entries written or removed
+     */
+    public function reindex(?string $name = null): int
+    {
+        $name ??= $this->driverName;
+
+        if ($name === CronIndex::WP_CRON) {
+            return 0;
+        }
+
+        $driver = $this->driverNamed($name);
+        $actual = [];
+        $changed = 0;
+        $known = [];
+
+        foreach (CronIndex::events($name) as $entry) {
+            $known[self::identity($entry->hook, $entry->args).'|'.$entry->timestamp] = $entry;
+        }
+
+        foreach ($driver->events() as $event) {
+            $identity = self::identity($event->hook, $event->args).'|'.$event->timestamp;
+            $actual[$identity] = true;
+
+            if (! isset($known[$identity])) {
+                CronIndex::record($event, $name);
+                $changed++;
+            }
+        }
+
+        foreach ($known as $identity => $entry) {
+            if (! isset($actual[$identity])) {
+                CronIndex::forget($entry->hook, $entry->args, $name);
+                $changed++;
+            }
+        }
+
+        return $changed;
     }
 
     /**
@@ -124,10 +340,10 @@ final class ScheduleEngine
     /**
      * The driver an event goes to, or already is on.
      *
-     * A new event goes to the chosen driver, unless its hook is protected or
-     * the driver is not there. An event whose hook and arguments are already in
-     * the 'cron' option stays on WP-Cron, so a recurring event WP-Cron runs
-     * keeps rescheduling itself there.
+     * An event already in the 'cron' option is on the driver its entry names,
+     * WP-Cron when it names none: a recurring event WP-Cron runs keeps
+     * rescheduling itself there. A new event goes to the chosen driver, unless
+     * its hook is protected or the driver is not there.
      *
      * @param  array<int|string, mixed>  $args
      */
@@ -137,7 +353,17 @@ final class ScheduleEngine
             return $this->driver;
         }
 
-        if (! $this->driver->available() || in_array($hook, $this->protectedHooks(), true) || $this->inCronOption($hook, $args)) {
+        $owner = CronIndex::ownerOf($hook, $args);
+
+        if ($owner !== null) {
+            try {
+                return $this->driverNamed($owner);
+            } catch (ScheduleException) {
+                return $this->fallback;
+            }
+        }
+
+        if (! $this->driver->available() || in_array($hook, $this->protectedHooks(), true)) {
             return $this->fallback;
         }
 
@@ -145,21 +371,71 @@ final class ScheduleEngine
     }
 
     /**
-     * Whether the 'cron' option holds an event of the hook with exactly these arguments.
+     * Cancel an event the index shows as a driver's: the driver drops it, then the index.
      *
      * @param  array<int|string, mixed>  $args
      */
-    public function inCronOption(string $hook, array $args = []): bool
+    public function cancelOwned(string $owner, string $hook, array $args): int
     {
-        $key = md5(serialize($args));
+        $this->busy = true;
 
-        foreach ((array) _get_cron_array() as $hooks) {
-            if (is_array($hooks) && isset($hooks[$hook][$key])) {
-                return true;
-            }
+        try {
+            $count = $this->driverNamed($owner)->cancel($hook, $args);
+        } finally {
+            $this->busy = false;
         }
 
-        return false;
+        CronIndex::forget($hook, $args, $owner);
+
+        return $count;
+    }
+
+    /**
+     * Give the drivers what a direct write to the 'cron' option did to the events they keep: a removed entry is cancelled, a moved one scheduled at its new time.
+     *
+     * @param  array{removed: list<Event>, moved: list<Event>}  $changes
+     */
+    public function applyChanges(array $changes): void
+    {
+        $this->busy = true;
+
+        try {
+            foreach ([...$changes['removed'], ...$changes['moved']] as $event) {
+                $this->driverNamed((string) $event->driver)->cancel($event->hook, $event->args);
+            }
+
+            foreach ($changes['moved'] as $event) {
+                $driver = $this->driverNamed((string) $event->driver);
+
+                $event->recurrence !== null
+                    ? $driver->recurring($event->hook, $event->timestamp, $event->recurrence, $event->args)
+                    : $driver->once($event->hook, $event->timestamp, $event->args);
+            }
+        } catch (\Throwable) {
+            // A driver that is gone or cannot take the event: the option keeps what was written, and the doctor reports the drift
+        } finally {
+            $this->busy = false;
+        }
+    }
+
+    /**
+     * Run something that changes a driver's events, without the index following the driver's reports: the caller writes the index itself.
+     *
+     * @template T
+     *
+     * @param  Closure(): T  $change
+     * @return T
+     */
+    public function quietly(Closure $change): mixed
+    {
+        $busy = $this->busy;
+        $this->busy = true;
+
+        try {
+            return $change();
+        } finally {
+            $this->busy = $busy;
+        }
     }
 
     /**
@@ -206,7 +482,7 @@ final class ScheduleEngine
      *
      * @return bool Whether the event was scheduled by this call
      *
-     * @throws Exceptions\ScheduleException When the driver cannot schedule it
+     * @throws ScheduleException When the driver cannot schedule it
      */
     public function schedule(Event $event): bool
     {
@@ -222,7 +498,7 @@ final class ScheduleEngine
      *
      * @return bool False when an identical single event is already due
      *
-     * @throws Exceptions\ScheduleException When the driver cannot schedule it
+     * @throws ScheduleException When the driver cannot schedule it
      */
     public function place(Event $event): bool
     {
@@ -242,6 +518,12 @@ final class ScheduleEngine
      */
     public function next(string $hook, array $args = []): ?int
     {
+        $owned = $this->askOwner($hook, $args);
+
+        if ($owned !== null) {
+            return $owned;
+        }
+
         $times = [];
 
         foreach ($this->stores() as $store) {
@@ -256,6 +538,44 @@ final class ScheduleEngine
     }
 
     /**
+     * The time of an event the index shows as a driver's, as the driver says it.
+     *
+     * The index is a mirror: an action deleted from Tools › Scheduled Actions, or
+     * a driver that lost the event, would leave an entry that WordPress's own
+     * wp_next_scheduled() keeps believing, and that stops a recurring event from
+     * ever being scheduled again. When the driver has no such event, the entry
+     * goes. A driver that cannot answer yet is trusted with what the index says.
+     *
+     * @param  array<int|string, mixed>  $args
+     */
+    private function askOwner(string $hook, array $args): ?int
+    {
+        $owner = CronIndex::ownerOf($hook, $args);
+
+        if ($owner === null || $owner === CronIndex::WP_CRON) {
+            return null;
+        }
+
+        try {
+            $driver = $this->driverNamed($owner);
+        } catch (ScheduleException) {
+            return null;
+        }
+
+        if ($driver instanceof DefersUntilReady && ! $driver->ready()) {
+            return array_values(array_filter(CronIndex::events($owner), static fn (Event $event): bool => $event->hook === $hook && $event->args === $args))[0]->timestamp ?? null;
+        }
+
+        $time = $driver->next($hook, $args);
+
+        if ($time === null) {
+            CronIndex::forget($hook, $args, $owner);
+        }
+
+        return $time;
+    }
+
+    /**
      * Cancel the events of a hook with these arguments, in every store.
      *
      * @param  array<int|string, mixed>  $args
@@ -264,9 +584,18 @@ final class ScheduleEngine
     public function cancel(string $hook, array $args = []): int
     {
         $count = 0;
+        $this->busy = true;
 
-        foreach ($this->stores() as $store) {
-            $count += $store->cancel($hook, $args);
+        try {
+            foreach ($this->stores() as $store) {
+                $count += $store->cancel($hook, $args);
+            }
+        } finally {
+            $this->busy = false;
+        }
+
+        if ($this->indexes()) {
+            CronIndex::forget($hook, $args, $this->driverName);
         }
 
         if (isset($this->buffer[self::identity($hook, $args)])) {
@@ -283,9 +612,18 @@ final class ScheduleEngine
     public function clear(string $hook): int
     {
         $count = 0;
+        $this->busy = true;
 
-        foreach ($this->stores() as $store) {
-            $count += $store->clear($hook);
+        try {
+            foreach ($this->stores() as $store) {
+                $count += $store->clear($hook);
+            }
+        } finally {
+            $this->busy = false;
+        }
+
+        if ($this->indexes()) {
+            CronIndex::forgetHook($hook, $this->driverName);
         }
 
         foreach ($this->buffer as $identity => $event) {
@@ -299,21 +637,43 @@ final class ScheduleEngine
     }
 
     /**
-     * Everything that is scheduled, in every store, soonest first.
+     * Everything that is scheduled, whoever keeps it, soonest first: the index, then what the stores hold that it does not show yet.
      *
      * @return list<Event>
      */
     public function events(): array
     {
         $events = array_values($this->buffer);
+        $seen = [];
+
+        if ($this->fallback instanceof ScheduleDriver || $this->driver instanceof WpCronDriver) {
+            foreach (CronIndex::events() as $event) {
+                $events[] = $event;
+                $seen[self::identity($event->hook, $event->args).'|'.$event->timestamp] = true;
+            }
+        }
 
         foreach ($this->stores() as $store) {
-            array_push($events, ...$store->events());
+            foreach ($store->events() as $event) {
+                if (! isset($seen[self::identity($event->hook, $event->args).'|'.$event->timestamp])) {
+                    $events[] = $event;
+                }
+            }
         }
 
         usort($events, static fn (Event $a, Event $b): int => $a->timestamp <=> $b->timestamp);
 
         return $events;
+    }
+
+    /**
+     * What the 'cron' option shows: every event with the driver that keeps it, soonest first. No query to a driver.
+     *
+     * @return list<Event>
+     */
+    public function index(): array
+    {
+        return CronIndex::events();
     }
 
     /**
@@ -339,11 +699,29 @@ final class ScheduleEngine
 
     private function give(ScheduleDriver $driver, Event $event): bool
     {
-        if ($event->recurrence !== null) {
-            return $driver->recurring($event->hook, $event->timestamp, $event->recurrence, $event->args);
+        $this->busy = true;
+
+        try {
+            $placed = $event->recurrence !== null
+                ? $driver->recurring($event->hook, $event->timestamp, $event->recurrence, $event->args)
+                : $driver->once($event->hook, $event->timestamp, $event->args);
+        } finally {
+            $this->busy = false;
         }
 
-        return $driver->once($event->hook, $event->timestamp, $event->args);
+        if ($placed && $this->indexes() && $driver === $this->driver) {
+            CronIndex::record($event, $this->driverName);
+        }
+
+        return $placed;
+    }
+
+    /**
+     * Whether the chosen driver is one the index follows: WP-Cron's own events are written by the core.
+     */
+    private function indexes(): bool
+    {
+        return $this->fallback instanceof ScheduleDriver && $this->driverName !== CronIndex::WP_CRON;
     }
 
     private function buffer(DefersUntilReady $driver, Event $event): bool

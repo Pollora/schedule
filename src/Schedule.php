@@ -7,6 +7,8 @@ namespace Pollora\Schedule;
 use DateTimeImmutable;
 use InvalidArgumentException;
 use LogicException;
+use Pollora\Schedule\Cli\Registrar;
+use Pollora\Schedule\Contracts\ReportsChanges;
 use Pollora\Schedule\Contracts\ScheduleDriver;
 use Pollora\Schedule\Drivers\ActionSchedulerDriver;
 use Pollora\Schedule\Drivers\WpCronDriver;
@@ -30,6 +32,11 @@ final class Schedule
     ];
 
     private static ?ScheduleEngine $engine = null;
+
+    /**
+     * The driver chosen before WordPress could take hooks, to wire once it can.
+     */
+    private static ?string $wanted = null;
 
     /**
      * @var array<string, callable(): ScheduleDriver|ScheduleDriver>
@@ -104,12 +111,31 @@ final class Schedule
 
             $name = getenv('POLLORA_SCHEDULE_DRIVER');
 
-            if (is_string($name) && $name !== '') {
-                self::driver($name);
-            }
+            // WP-Cron by default still sets the guard: it must not run what another driver kept
+            self::driver(is_string($name) && $name !== '' ? $name : 'wp-cron');
         }
 
+        self::boot();
+
         return self::$engine;
+    }
+
+    /**
+     * Hook the chosen driver into WordPress, once WordPress can take hooks.
+     *
+     * An application that starts before WordPress (Pollora does) creates the
+     * engine and chooses the driver first; this finishes the job as soon as
+     * add_filter() exists, and is safe to call again.
+     */
+    public static function boot(): void
+    {
+        if (self::$wanted === null || ! function_exists('add_filter')) {
+            return;
+        }
+
+        $name = self::$wanted;
+        self::$wanted = null;
+        self::driver($name);
     }
 
     /**
@@ -124,17 +150,61 @@ final class Schedule
      */
     public static function driver(string $name): void
     {
-        $factory = self::$drivers[$name] ?? (isset(self::DRIVERS[$name]) ? static fn (): ScheduleDriver => new (self::DRIVERS[$name]) : null) ?? throw new InvalidArgumentException(sprintf('Unknown schedule driver "%s".', $name));
-        $driver = $factory instanceof ScheduleDriver ? $factory : $factory();
+        $driver = self::build($name);
         $engine = self::$engine ?? self::$engine = new ScheduleEngine;
 
-        if ($driver instanceof WpCronDriver) {
-            $engine->useDriver($driver);
+        if (! function_exists('add_filter')) {
+            self::$wanted = $name;
 
             return;
         }
 
-        $engine->selectDriver($driver);
+        $engine->resolveDriversWith(static fn (string $driverName): ?ScheduleDriver => self::tryBuild($driverName));
+        Registrar::register();
+
+        if ($driver instanceof WpCronDriver) {
+            $engine->useDriver($driver);
+
+            // Events a driver kept before it was set aside still need the guard, and their driver reports to the index
+            $engine->guardIfNeeded(static function (): iterable {
+                foreach (self::DRIVERS as $driverName => $class) {
+                    if ($driverName !== 'wp-cron' && is_subclass_of($class, ReportsChanges::class)) {
+                        yield $driverName => self::build($driverName);
+                    }
+                }
+            });
+
+            return;
+        }
+
+        $engine->selectDriver($driver, $name);
+    }
+
+    /**
+     * @throws InvalidArgumentException When no driver has this name
+     */
+    private static function build(string $name): ScheduleDriver
+    {
+        $factory = self::$drivers[$name] ?? (isset(self::DRIVERS[$name]) ? static fn (): ScheduleDriver => new (self::DRIVERS[$name]) : null) ?? throw new InvalidArgumentException(sprintf('Unknown schedule driver "%s".', $name));
+
+        return $factory instanceof ScheduleDriver ? $factory : $factory();
+    }
+
+    private static function tryBuild(string $name): ?ScheduleDriver
+    {
+        try {
+            return self::build($name);
+        } catch (InvalidArgumentException) {
+            return null;
+        }
+    }
+
+    /**
+     * Whether a driver of this name can be chosen.
+     */
+    public static function knows(string $name): bool
+    {
+        return isset(self::$drivers[$name]) || isset(self::DRIVERS[$name]);
     }
 
     /**
