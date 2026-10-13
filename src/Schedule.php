@@ -5,8 +5,11 @@ declare(strict_types=1);
 namespace Pollora\Schedule;
 
 use DateTimeImmutable;
+use InvalidArgumentException;
 use LogicException;
 use Pollora\Schedule\Contracts\ScheduleDriver;
+use Pollora\Schedule\Drivers\ActionSchedulerDriver;
+use Pollora\Schedule\Drivers\WpCronDriver;
 use Pollora\Schedule\Testing\ScheduleFake;
 use Psr\Container\ContainerInterface;
 
@@ -21,7 +24,17 @@ use Psr\Container\ContainerInterface;
  */
 final class Schedule
 {
+    private const array DRIVERS = [
+        'wp-cron' => WpCronDriver::class,
+        'action-scheduler' => ActionSchedulerDriver::class,
+    ];
+
     private static ?ScheduleEngine $engine = null;
+
+    /**
+     * @var array<string, callable(): ScheduleDriver|ScheduleDriver>
+     */
+    private static array $drivers = [];
 
     private static ?ScheduleFake $fake = null;
 
@@ -51,7 +64,7 @@ final class Schedule
      */
     public static function cancel(string $hook, array $args = []): int
     {
-        return self::engine()->driver()->cancel($hook, $args);
+        return self::engine()->cancel($hook, $args);
     }
 
     /**
@@ -59,7 +72,7 @@ final class Schedule
      */
     public static function clear(string $hook): int
     {
-        return self::engine()->driver()->clear($hook);
+        return self::engine()->clear($hook);
     }
 
     /**
@@ -69,7 +82,7 @@ final class Schedule
      */
     public static function next(string $hook, array $args = []): ?DateTimeImmutable
     {
-        $timestamp = self::engine()->driver()->next($hook, $args);
+        $timestamp = self::engine()->next($hook, $args);
 
         return $timestamp === null ? null : (new DateTimeImmutable('@'.$timestamp))->setTimezone(When::timezone());
     }
@@ -81,12 +94,57 @@ final class Schedule
      */
     public static function events(): array
     {
-        return self::engine()->driver()->events();
+        return self::engine()->events();
     }
 
     public static function engine(): ScheduleEngine
     {
-        return self::$engine ??= new ScheduleEngine;
+        if (! self::$engine instanceof ScheduleEngine) {
+            self::$engine = new ScheduleEngine;
+
+            $name = getenv('POLLORA_SCHEDULE_DRIVER');
+
+            if (is_string($name) && $name !== '') {
+                self::driver($name);
+            }
+        }
+
+        return self::$engine;
+    }
+
+    /**
+     * Choose the driver of the site by name: 'wp-cron' (the default) or 'action-scheduler', or one added with extend().
+     *
+     * WordPress's own scheduling functions follow it, for the core, plugins and
+     * themes as well. A driver that is not there falls back to WP-Cron, and
+     * events already in the 'cron' option stay on WP-Cron until they are migrated.
+     * POLLORA_SCHEDULE_DRIVER sets it without code.
+     *
+     * @throws InvalidArgumentException When no driver has this name
+     */
+    public static function driver(string $name): void
+    {
+        $factory = self::$drivers[$name] ?? (isset(self::DRIVERS[$name]) ? static fn (): ScheduleDriver => new (self::DRIVERS[$name]) : null) ?? throw new InvalidArgumentException(sprintf('Unknown schedule driver "%s".', $name));
+        $driver = $factory instanceof ScheduleDriver ? $factory : $factory();
+        $engine = self::$engine ?? self::$engine = new ScheduleEngine;
+
+        if ($driver instanceof WpCronDriver) {
+            $engine->useDriver($driver);
+
+            return;
+        }
+
+        $engine->selectDriver($driver);
+    }
+
+    /**
+     * Add a driver, to choose by name with driver().
+     *
+     * @param  callable(): ScheduleDriver|ScheduleDriver  $driver
+     */
+    public static function extend(string $name, callable|ScheduleDriver $driver): void
+    {
+        self::$drivers[$name] = $driver;
     }
 
     /**

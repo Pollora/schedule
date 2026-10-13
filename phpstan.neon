@@ -4,5 +4,7 @@ includes:
 parameters:
     level: 5
     treatPhpDocTypesAsCertain: false
+    bootstrapFiles:
+        - stubs/action-scheduler.php
     paths:
         - src
