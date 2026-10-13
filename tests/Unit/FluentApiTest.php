@@ -228,7 +228,8 @@ describe('Schedule::fake()', function (): void {
         Schedule::assertNotScheduled('send_digest', fn (Event $event): bool => $event->args === ['user' => 2]);
         Schedule::assertNotScheduled('other');
 
-        expect($this->hooks)->toBe([]);
+        // Only the engine's own watching of Action Scheduler, never a handler of an event
+        expect(array_keys($this->hooks))->not->toContain('reports_compile', 'send_digest');
     });
 
     it('asserts that nothing was scheduled, until something is', function (): void {

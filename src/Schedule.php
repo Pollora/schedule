@@ -7,6 +7,7 @@ namespace Pollora\Schedule;
 use DateTimeImmutable;
 use InvalidArgumentException;
 use LogicException;
+use Pollora\Schedule\Cli\Registrar;
 use Pollora\Schedule\Contracts\ReportsChanges;
 use Pollora\Schedule\Contracts\ScheduleDriver;
 use Pollora\Schedule\Drivers\ActionSchedulerDriver;
@@ -31,6 +32,11 @@ final class Schedule
     ];
 
     private static ?ScheduleEngine $engine = null;
+
+    /**
+     * The driver chosen before WordPress could take hooks, to wire once it can.
+     */
+    private static ?string $wanted = null;
 
     /**
      * @var array<string, callable(): ScheduleDriver|ScheduleDriver>
@@ -105,12 +111,31 @@ final class Schedule
 
             $name = getenv('POLLORA_SCHEDULE_DRIVER');
 
-            if (is_string($name) && $name !== '') {
-                self::driver($name);
-            }
+            // WP-Cron by default still sets the guard: it must not run what another driver kept
+            self::driver(is_string($name) && $name !== '' ? $name : 'wp-cron');
         }
 
+        self::boot();
+
         return self::$engine;
+    }
+
+    /**
+     * Hook the chosen driver into WordPress, once WordPress can take hooks.
+     *
+     * An application that starts before WordPress (Pollora does) creates the
+     * engine and chooses the driver first; this finishes the job as soon as
+     * add_filter() exists, and is safe to call again.
+     */
+    public static function boot(): void
+    {
+        if (self::$wanted === null || ! function_exists('add_filter')) {
+            return;
+        }
+
+        $name = self::$wanted;
+        self::$wanted = null;
+        self::driver($name);
     }
 
     /**
@@ -127,7 +152,15 @@ final class Schedule
     {
         $driver = self::build($name);
         $engine = self::$engine ?? self::$engine = new ScheduleEngine;
+
+        if (! function_exists('add_filter')) {
+            self::$wanted = $name;
+
+            return;
+        }
+
         $engine->resolveDriversWith(static fn (string $driverName): ?ScheduleDriver => self::tryBuild($driverName));
+        Registrar::register();
 
         if ($driver instanceof WpCronDriver) {
             $engine->useDriver($driver);

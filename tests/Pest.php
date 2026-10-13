@@ -24,7 +24,7 @@ pest()->beforeEach(function (): void {
 
     // Schedule keeps one engine for the process: start each test from the default one
     $schedule = new ReflectionClass(Schedule::class);
-    foreach (['engine', 'fake', 'driverBeforeFake'] as $property) {
+    foreach (['engine', 'fake', 'driverBeforeFake', 'wanted'] as $property) {
         $schedule->setStaticPropertyValue($property, null);
     }
 

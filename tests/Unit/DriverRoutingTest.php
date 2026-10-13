@@ -205,3 +205,21 @@ it('chooses a driver by name, and wp-cron puts WordPress back on its own', funct
     expect(array_keys($this->filters))->toBe(['pre_get_ready_cron_jobs', 'pre_update_option_cron'])
         ->and(fn () => Schedule::driver('nope'))->toThrow(InvalidArgumentException::class);
 });
+
+it('wires the driver chosen before WordPress could take hooks, once it can', function (): void {
+    // The application chose it at its own start: Schedule::driver() only noted the name
+    $this->filters = [];
+    (new ReflectionClass(Schedule::class))->setStaticPropertyValue('wanted', 'action-scheduler');
+
+    expect($this->filters)->toBe([]);
+
+    Schedule::boot();
+
+    expect(Schedule::engine()->driverName())->toBe('action-scheduler')
+        ->and($this->filters)->toHaveKey('pre_schedule_event');
+
+    $filters = $this->filters;
+    Schedule::boot();
+
+    expect($this->filters)->toBe($filters);
+});

@@ -6,5 +6,6 @@ parameters:
     treatPhpDocTypesAsCertain: false
     bootstrapFiles:
         - stubs/action-scheduler.php
+        - stubs/wp-cli.php
     paths:
         - src
