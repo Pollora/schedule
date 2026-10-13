@@ -8,6 +8,7 @@ use Pollora\Schedule\Drivers\ActionSchedulerDriver;
 use Pollora\Schedule\Event;
 use Pollora\Schedule\Schedule;
 use Pollora\Schedule\ScheduleEngine;
+use Pollora\Schedule\Support\CronIndex;
 use Pollora\Schedule\Testing\ScheduleFake;
 
 require_once __DIR__.'/../Support/ActionSchedulerFake.php';
@@ -35,6 +36,11 @@ beforeEach(function (): void {
     });
     Functions\when('wp_get_schedules')->justReturn(['daily' => ['interval' => 86400, 'display' => 'Once Daily']]);
     Functions\when('_get_cron_array')->alias(fn (): array => $this->cron);
+    Functions\when('_set_cron_array')->alias(function (array $cron): bool {
+        $this->cron = $cron;
+
+        return true;
+    });
     // WP-Cron, as the engine's fallback reaches it
     Functions\when('wp_schedule_single_event')->alias(function (int $ts, string $hook, array $args): bool {
         $this->wpCron[] = ['once', $hook, $ts, $args];
@@ -59,6 +65,7 @@ it('sends a new event to the chosen driver', function (): void {
     $this->engine->schedule(new Event('reports', time() + 100, 'daily'));
 
     expect($this->wpCron)->toBe([])
+        ->and(array_column(CronIndex::events('action-scheduler'), 'hook'))->toEqualCanonicalizing(['digest', 'reports'])
         ->and(ActionScheduler_FakeStore::$actions)->toHaveCount(2)
         ->and($this->engine->next('digest', ['u' => 1]))->not->toBeNull();
 });
@@ -195,6 +202,6 @@ it('chooses a driver by name, and wp-cron puts WordPress back on its own', funct
 
     Schedule::driver('wp-cron');
 
-    expect($this->filters)->toBe([])
+    expect(array_keys($this->filters))->toBe(['pre_get_ready_cron_jobs', 'pre_update_option_cron'])
         ->and(fn () => Schedule::driver('nope'))->toThrow(InvalidArgumentException::class);
 });

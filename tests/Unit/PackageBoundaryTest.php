@@ -44,6 +44,7 @@ arch('schedule stays free of the Laravel application')
         'wp_timezone',
         'wp_unschedule_hook',
         '_get_cron_array',
+        '_set_cron_array',
     ]);
 
 arch('the contract and the vocabulary do not depend on a driver')

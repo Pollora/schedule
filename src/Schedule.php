@@ -7,6 +7,7 @@ namespace Pollora\Schedule;
 use DateTimeImmutable;
 use InvalidArgumentException;
 use LogicException;
+use Pollora\Schedule\Contracts\ReportsChanges;
 use Pollora\Schedule\Contracts\ScheduleDriver;
 use Pollora\Schedule\Drivers\ActionSchedulerDriver;
 use Pollora\Schedule\Drivers\WpCronDriver;
@@ -124,17 +125,44 @@ final class Schedule
      */
     public static function driver(string $name): void
     {
-        $factory = self::$drivers[$name] ?? (isset(self::DRIVERS[$name]) ? static fn (): ScheduleDriver => new (self::DRIVERS[$name]) : null) ?? throw new InvalidArgumentException(sprintf('Unknown schedule driver "%s".', $name));
-        $driver = $factory instanceof ScheduleDriver ? $factory : $factory();
+        $driver = self::build($name);
         $engine = self::$engine ?? self::$engine = new ScheduleEngine;
+        $engine->resolveDriversWith(static fn (string $driverName): ?ScheduleDriver => self::tryBuild($driverName));
 
         if ($driver instanceof WpCronDriver) {
             $engine->useDriver($driver);
+            $engine->guard();
+
+            // Events a driver kept before it was set aside still report to the index
+            foreach (self::DRIVERS as $driverName => $class) {
+                if ($driverName !== 'wp-cron' && is_subclass_of($class, ReportsChanges::class)) {
+                    $engine->watch($driverName, self::build($driverName));
+                }
+            }
 
             return;
         }
 
-        $engine->selectDriver($driver);
+        $engine->selectDriver($driver, $name);
+    }
+
+    /**
+     * @throws InvalidArgumentException When no driver has this name
+     */
+    private static function build(string $name): ScheduleDriver
+    {
+        $factory = self::$drivers[$name] ?? (isset(self::DRIVERS[$name]) ? static fn (): ScheduleDriver => new (self::DRIVERS[$name]) : null) ?? throw new InvalidArgumentException(sprintf('Unknown schedule driver "%s".', $name));
+
+        return $factory instanceof ScheduleDriver ? $factory : $factory();
+    }
+
+    private static function tryBuild(string $name): ?ScheduleDriver
+    {
+        try {
+            return self::build($name);
+        } catch (InvalidArgumentException) {
+            return null;
+        }
     }
 
     /**

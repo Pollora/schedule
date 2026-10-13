@@ -17,6 +17,8 @@ abstract class ActionScheduler_Store
     public const STATUS_PENDING = 'pending';
 
     abstract public function cancel_action($action_id);
+
+    abstract public function fetch_action($action_id);
 }
 
 /**

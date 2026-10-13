@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Pollora\Schedule\Drivers;
 
+use Closure;
 use Pollora\Schedule\Contracts\DefersUntilReady;
 use Pollora\Schedule\Contracts\FindsEvent;
+use Pollora\Schedule\Contracts\ReportsChanges;
 use Pollora\Schedule\Contracts\ScheduleDriver;
 use Pollora\Schedule\Event;
 use Pollora\Schedule\Exceptions\ScheduleException;
@@ -19,7 +21,7 @@ use Pollora\Schedule\Exceptions\ScheduleException;
  * own and is only looked up in that group, so cancelling a hook never reaches
  * the actions WooCommerce or another plugin keeps on the same hook.
  */
-final class ActionSchedulerDriver implements DefersUntilReady, FindsEvent, ScheduleDriver
+final class ActionSchedulerDriver implements DefersUntilReady, FindsEvent, ReportsChanges, ScheduleDriver
 {
     public const string GROUP = 'pollora/schedule';
 
@@ -50,6 +52,27 @@ final class ActionSchedulerDriver implements DefersUntilReady, FindsEvent, Sched
     public function readyAction(): string
     {
         return 'action_scheduler_init';
+    }
+
+    /**
+     * An action of the group is stored, completed, failed or cancelled.
+     *
+     * A recurring action is stored again after it completed, so the index sees
+     * the removal and then the next occurrence.
+     */
+    public function observe(Closure $changed): void
+    {
+        $report = function (mixed $id) use ($changed): void {
+            $action = $this->fetch($id);
+
+            if ($action !== null) {
+                $changed((string) $action->get_hook(), (array) $action->get_args());
+            }
+        };
+
+        foreach (['action_scheduler_stored_action', 'action_scheduler_completed_action', 'action_scheduler_failed_action', 'action_scheduler_canceled_action'] as $hook) {
+            add_action($hook, $report, 10, 1);
+        }
     }
 
     public function once(string $hook, int $timestamp, array $args = []): bool
@@ -115,6 +138,20 @@ final class ActionSchedulerDriver implements DefersUntilReady, FindsEvent, Sched
         usort($events, static fn (Event $a, Event $b): int => $a->timestamp <=> $b->timestamp);
 
         return $events;
+    }
+
+    /**
+     * The action of the group with this identifier, null for another group's or a missing one.
+     */
+    private function fetch(mixed $id): ?object
+    {
+        if (! is_numeric($id) || ! class_exists('ActionScheduler', false)) {
+            return null;
+        }
+
+        $action = \ActionScheduler::store()->fetch_action((string) $id);
+
+        return is_object($action) && method_exists($action, 'get_group') && $action->get_group() === self::GROUP ? $action : null;
     }
 
     /**
