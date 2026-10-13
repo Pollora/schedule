@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-10-13
+
+What pollora/hook 2.0 queues through: Action Scheduler groups of the caller's choice, and `enqueue()`. `ScheduleDriver` is unchanged.
+
 ### Added
 
 - `ActionSchedulerDriver` takes the group of its actions (`new ActionSchedulerDriver('crm')`), `pollora/schedule` by default. Every query, cancellation and observation uses the instance's group, and the `cron` index follows the default group only: another package can queue work in a group of its own without it ever reaching the index
