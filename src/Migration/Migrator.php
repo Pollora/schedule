@@ -112,13 +112,11 @@ final class Migrator
             }
 
             // Already there, from an earlier run: only the index and the source are left to settle
-            if ($target->next($event->hook, $event->args) === null) {
-                $this->engine->quietly(fn (): bool => $event->recurrence !== null
-                    ? $target->recurring($event->hook, $event->timestamp, $event->recurrence, $event->args)
-                    : $target->once($event->hook, $event->timestamp, $event->args));
-            }
+            $placed = $target->next($event->hook, $event->args) === null
+                ? $this->engine->quietly(fn (): ?Event => $this->engine->hand($target, $event))
+                : null;
 
-            CronIndex::record($event, $to);
+            CronIndex::record($placed ?? $event, $to);
         });
 
         if ($from === CronIndex::WP_CRON) {

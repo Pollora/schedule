@@ -51,6 +51,24 @@ final class CronIndex
     }
 
     /**
+     * The identifier of the placement of the event with these arguments, null when it has none.
+     *
+     * @param  array<int|string, mixed>  $args
+     */
+    public static function idOf(string $hook, array $args = []): ?string
+    {
+        $key = self::key($args);
+
+        foreach (self::read() as $hooks) {
+            if (is_array($hooks) && isset($hooks[$hook][$key]) && is_array($hooks[$hook][$key]) && isset($hooks[$hook][$key]['id'])) {
+                return (string) $hooks[$hook][$key]['id'];
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Drivers that keep events of a hook, each once.
      *
      * @param  array<int|string, mixed>|null  $args  Exact arguments, null for any
@@ -128,6 +146,7 @@ final class CronIndex
                         args: (array) ($entry['args'] ?? []),
                         interval: isset($entry['interval']) ? (int) $entry['interval'] : null,
                         driver: self::owner($entry),
+                        id: isset($entry['id']) ? (string) $entry['id'] : null,
                     );
                 }
             }
@@ -149,6 +168,7 @@ final class CronIndex
         $key = self::key($event->args);
         $schedule = $event->recurrence;
         $interval = $event->interval;
+        $id = $event->id;
 
         if ($event->recurrence !== null) {
             $interval ??= (int) ((function_exists('wp_get_schedules') ? wp_get_schedules() : [])[$event->recurrence]['interval'] ?? 0);
@@ -158,6 +178,8 @@ final class CronIndex
             if ($schedule !== null && ($previous['interval'] ?? null) === $interval && ! empty($previous['schedule'])) {
                 $schedule = (string) $previous['schedule'];
             }
+
+            $id ??= isset($previous['id']) ? (string) $previous['id'] : null;
         }
 
         $entry = ['schedule' => $schedule ?? false, 'args' => $event->args];
@@ -168,6 +190,10 @@ final class CronIndex
 
         if ($owner !== self::WP_CRON) {
             $entry[self::MARKER] = $owner;
+        }
+
+        if ($id !== null) {
+            $entry['id'] = $id;
         }
 
         $crons[$event->timestamp][$event->hook][$key] = $entry;
@@ -303,6 +329,7 @@ final class CronIndex
                         args: (array) ($entry['args'] ?? []),
                         interval: isset($entry['interval']) ? (int) $entry['interval'] : null,
                         driver: self::owner($entry),
+                        id: isset($entry['id']) ? (string) $entry['id'] : null,
                     );
                 }
             }

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+What a driver with no store of its own (a queue of deferred jobs) needs. `ScheduleDriver` is unchanged.
+
+### Fixed
+
+- `POLLORA_SCHEDULE_DRIVER` naming a driver the application adds afterwards with `Schedule::extend()` no longer throws when the engine is first used: it starts on WP-Cron, and the application chooses its driver
+
+### Added
+
+- `Contracts\Identifies`: a driver that can only be told what to run, not asked what it holds. The engine gives each placement an identifier (`Event::$id`), hands it over with `placeIdentified()` and writes it in the `cron` entry (`id` key); the driver's job runs only if the entry still exists and carries its identifier, so cancelling is removing the entry
+- `CronIndex::idOf()`, and `id` on the events `CronIndex::events()` lists. Recording an event again without an identifier keeps the one the entry had
+- `ScheduleEngine::hand()`: give an event to a driver the way the engine does. Migrations and the replay of a direct write to the `cron` option go through it, so a placement made there is identified too
+
 ## [0.1.2] - 2026-10-13
 
 What pollora/hook 2.0 queues through: Action Scheduler groups of the caller's choice, and `enqueue()`. `ScheduleDriver` is unchanged.

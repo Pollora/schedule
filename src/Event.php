@@ -17,6 +17,7 @@ final readonly class Event
      * @param  array<int|string, mixed>  $args  Arguments the hook receives
      * @param  int|null  $interval  Seconds between two runs, null for a single event
      * @param  string|null  $driver  Name of the driver that keeps the event, known when it comes from the index
+     * @param  string|null  $id  Identifier of the placement, for a driver that has no store to ask (see Contracts\Identifies)
      */
     public function __construct(
         public string $hook,
@@ -25,7 +26,13 @@ final readonly class Event
         public array $args = [],
         public ?int $interval = null,
         public ?string $driver = null,
+        public ?string $id = null,
     ) {}
+
+    public function withId(?string $id): self
+    {
+        return new self($this->hook, $this->timestamp, $this->recurrence, $this->args, $this->interval, $this->driver, $id);
+    }
 
     public function isRecurring(): bool
     {

@@ -7,6 +7,7 @@ namespace Pollora\Schedule;
 use Closure;
 use Pollora\Schedule\Contracts\DefersUntilReady;
 use Pollora\Schedule\Contracts\FindsEvent;
+use Pollora\Schedule\Contracts\Identifies;
 use Pollora\Schedule\Contracts\ReportsChanges;
 use Pollora\Schedule\Contracts\ScheduleDriver;
 use Pollora\Schedule\Drivers\ActionSchedulerDriver;
@@ -406,10 +407,11 @@ final class ScheduleEngine
 
             foreach ($changes['moved'] as $event) {
                 $driver = $this->driverNamed((string) $event->driver);
+                $placed = $this->hand($driver, $event);
 
-                $event->recurrence !== null
-                    ? $driver->recurring($event->hook, $event->timestamp, $event->recurrence, $event->args)
-                    : $driver->once($event->hook, $event->timestamp, $event->args);
+                if ($placed?->id !== null) {
+                    CronIndex::record($placed, (string) $event->driver);
+                }
             }
         } catch (\Throwable) {
             // A driver that is gone or cannot take the event: the option keeps what was written, and the doctor reports the drift
@@ -702,18 +704,38 @@ final class ScheduleEngine
         $this->busy = true;
 
         try {
-            $placed = $event->recurrence !== null
-                ? $driver->recurring($event->hook, $event->timestamp, $event->recurrence, $event->args)
-                : $driver->once($event->hook, $event->timestamp, $event->args);
+            $placed = $this->hand($driver, $event);
         } finally {
             $this->busy = false;
         }
 
-        if ($placed && $this->indexes() && $driver === $this->driver) {
-            CronIndex::record($event, $this->driverName);
+        if ($placed instanceof Event && $this->indexes() && $driver === $this->driver) {
+            CronIndex::record($placed, $this->driverName);
         }
 
-        return $placed;
+        return $placed instanceof Event;
+    }
+
+    /**
+     * Give an event to a driver, as it takes it: with the identifier of the placement when the driver keeps no store of its own.
+     *
+     * The caller writes the index; the event comes back as the driver took it, null when it ignored it.
+     *
+     * @throws ScheduleException When the driver cannot schedule it
+     */
+    public function hand(ScheduleDriver $driver, Event $event): ?Event
+    {
+        if ($driver instanceof Identifies) {
+            $event = $event->withId(bin2hex(random_bytes(8)));
+
+            return $driver->placeIdentified($event) ? $event : null;
+        }
+
+        $placed = $event->recurrence !== null
+            ? $driver->recurring($event->hook, $event->timestamp, $event->recurrence, $event->args)
+            : $driver->once($event->hook, $event->timestamp, $event->args);
+
+        return $placed ? $event : null;
     }
 
     /**
