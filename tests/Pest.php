@@ -28,5 +28,9 @@ pest()->beforeEach(function (): void {
         $schedule->setStaticPropertyValue($property, null);
     }
 
+    if (class_exists('ActionScheduler', false) && method_exists('ActionScheduler', 'reset')) {
+        ActionScheduler::reset();
+    }
+
     Monkey\tearDown();
 })->in('Unit');
