@@ -65,7 +65,9 @@ final class Reports
 
 ## Drivers
 
-A driver is where events are kept and who runs them. `WpCronDriver` is the default: a thin layer over `wp_schedule_event()`, `wp_schedule_single_event()` and the other functions of WordPress, so every filter the site hangs on them keeps working. Another driver implements `Pollora\Schedule\Contracts\ScheduleDriver` and is given to the engine with `Schedule::useDriver()`.
+A driver is where events are kept and who runs them. `WpCronDriver` is the default: a thin layer over `wp_schedule_event()`, `wp_schedule_single_event()` and the other functions of WordPress, so every filter the site hangs on them keeps working. Choose the driver of the site with `Schedule::driver('action-scheduler')` or `POLLORA_SCHEDULE_DRIVER=action-scheduler`. Events then live in Action Scheduler (its queue, its retries, its Tools › Scheduled Actions screen), in a group of their own, and WordPress's own functions follow: `wp_schedule_event()` called by the core, a plugin or a theme reaches it too. Events already in the `cron` option stay on WP-Cron, as do Action Scheduler's own queue runner, the hooks you protect (`ScheduleEngine::protect()`, `pollora/schedule/protected_hooks`) and every event when Action Scheduler is not there.
+
+Another driver implements `Pollora\Schedule\Contracts\ScheduleDriver` and is given to the engine with `Schedule::useDriver()`.
 
 ## Testing
 
