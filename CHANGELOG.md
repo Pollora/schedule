@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-14
+
+The public API is now stable: the fluent API, `#[Schedule]`, the drivers and their contracts (`ScheduleDriver`, `Identifies`, `Enqueues`, `FindsEvent`, `ReportsChanges`, `DefersUntilReady`), the `cron` option index and `Schedule::fake()`.
+
+### Documentation
+- The README describes `Identifies`, the contract of a driver with no store of its own, and the `laravel` driver the framework builds on it
+
 ## [0.1.4] - 2026-10-14
 
 ### Fixed

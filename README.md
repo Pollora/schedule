@@ -69,6 +69,10 @@ A driver is where events are kept and who runs them. `WpCronDriver` is the defau
 
 Another driver implements `Pollora\Schedule\Contracts\ScheduleDriver` and is given to the engine with `Schedule::useDriver()`.
 
+### A driver with no store of its own
+
+A queue of deferred jobs (the Laravel queue, which the Pollora framework adds as the `laravel` driver) cannot be asked what it holds. It implements `Pollora\Schedule\Contracts\Identifies` as well: the engine gives each placement an identifier (`Event::$id`), writes it in the entry of the `cron` option and hands the event to `placeIdentified()`. When the job runs, it runs only if the entry still exists and carries its identifier, so cancelling an event is removing its entry, and a job that was lost can be sent again from the index.
+
 ## Work another package queues
 
 `new ActionSchedulerDriver('my-group')` keeps its actions in a group of its own, which the `cron` index below never follows. `enqueue($hook, $timestamp, $args)` stores an action as it is, with no duplicate check, and queues an async action when the time is now: for a caller that gives each event an identifier and queues many.
