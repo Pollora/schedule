@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- A `#[Schedule]` method in the application's own classes (`app/`) is scheduled: its discovery is applied while Laravel boots, before WordPress has loaded its cron functions, so the event was never placed and the error was lost. The placement now waits for `init` when it comes that early.
+
 ## [0.1.3] - 2026-10-13
 What a driver with no store of its own (a queue of deferred jobs) needs. `ScheduleDriver` is unchanged.
 

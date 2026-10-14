@@ -180,6 +180,21 @@ final class ScheduleDiscovery implements DiscoveryInterface
      */
     private function scheduleWordPressCron(string $hookName, string $interval, array $args = []): void
     {
+        // The discovery of the application's own classes is applied while Laravel boots, before WordPress has loaded its cron functions: wait for 'init', which runs before any cron is spawned
+        if (function_exists('did_action') && did_action('init') === 0) {
+            add_action('init', fn () => $this->placeWordPressCron($hookName, $interval, $args), 0);
+
+            return;
+        }
+
+        $this->placeWordPressCron($hookName, $interval, $args);
+    }
+
+    /**
+     * @param  array<int|string, mixed>  $args
+     */
+    private function placeWordPressCron(string $hookName, string $interval, array $args): void
+    {
         try {
             $this->engine()->schedule(new Event($hookName, $this->engine()->now(), $interval, $args));
         } catch (ScheduleException) {
