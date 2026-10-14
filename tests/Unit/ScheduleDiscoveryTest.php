@@ -59,6 +59,7 @@ beforeEach(function (): void {
 
         return true;
     });
+    Functions\when('did_action')->justReturn(1);
     Functions\when('wp_next_scheduled')->justReturn(false);
     Functions\when('wp_schedule_event')->alias(function (int $timestamp, string $recurrence, string $hook, array $args = []): bool {
         $this->events[$hook] = [$recurrence, $args];
@@ -76,6 +77,32 @@ it('schedules each method on its hook, named after the class and method by defau
         ->and($this->events['nightly_reports_compile'])->toBe(['daily', []])
         ->and($this->events['reports_ping'])->toBe(['hourly', ['site' => 1]])
         ->and($this->events['nightly_reports_archive_old_reports'])->toBe(['every_month', []]);
+});
+
+it('waits for init when the discovery is applied before WordPress has loaded its cron functions', function (): void {
+    Functions\when('did_action')->justReturn(0);
+    $this->events = [];
+    $onInit = [];
+    Functions\when('add_action')->alias(function (string $hook, callable $callback) use (&$onInit): bool {
+        if ($hook === 'init') {
+            $onInit[] = $callback;
+        }
+
+        return true;
+    });
+
+    $discovery = new ScheduleDiscovery;
+    $discovery->discover(new DiscoveryLocation('', __DIR__), DiscoveredClass::fromReflection(new ReflectionClass(NightlyReports::class)), new ReflectionCache);
+    $discovery->apply();
+
+    expect($this->events)->toBe([])
+        ->and($onInit)->toHaveCount(4);
+
+    foreach ($onInit as $callback) {
+        $callback();
+    }
+
+    expect($this->events)->toHaveKeys(['nightly_reports_compile', 'reports_ping', 'nightly_reports_archive_old_reports']);
 });
 
 it('registers the schedules WordPress does not know', function (): void {
