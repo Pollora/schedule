@@ -1,0 +1,6 @@
+{
+    "version": 1,
+    "surface": {
+        "hook:pollora/schedule/protected_hooks": "filter"
+    }
+}
