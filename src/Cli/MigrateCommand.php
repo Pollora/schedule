@@ -44,7 +44,7 @@ class MigrateCommand
      * @param  list<string>  $args
      * @param  array<string, mixed>  $assoc_args
      */
-    public function __invoke($args, $assoc_args): void
+    public function __invoke($args, array $assoc_args): void
     {
         $engine = Schedule::engine();
         $to = (string) ($assoc_args['to'] ?? $engine->driverName());

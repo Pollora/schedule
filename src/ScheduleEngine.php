@@ -330,7 +330,7 @@ final class ScheduleEngine
             $hooks = (array) apply_filters('pollora/schedule/protected_hooks', $hooks);
         }
 
-        return array_values(array_unique(array_map('strval', $hooks)));
+        return array_values(array_unique(array_map(strval(...), $hooks)));
     }
 
     public function protect(string ...$hooks): void
@@ -785,15 +785,15 @@ final class ScheduleEngine
 
         $this->attached[$key] = true;
 
-        add_action($hook, function (mixed ...$received) use ($hook, $handler): void {
-            $this->run($hook, $handler, $received);
+        add_action($hook, function (mixed ...$received) use ($handler): void {
+            $this->run($handler, $received);
         }, 10, PHP_INT_MAX);
     }
 
     /**
      * @param  array<int|string, mixed>  $args  What WordPress passed the hook
      */
-    private function run(string $hook, string|array|Closure $handler, array $args): void
+    private function run(string|array|Closure $handler, array $args): void
     {
         if (is_string($handler) && ! class_exists($handler)) {
             do_action_ref_array($handler, $args);
