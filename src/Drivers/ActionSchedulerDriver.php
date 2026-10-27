@@ -228,7 +228,7 @@ final class ActionSchedulerDriver implements DefersUntilReady, Enqueues, FindsEv
     {
         $now = time();
         $min = $timestamp < $now + self::DUPLICATE_WINDOW ? 0 : $timestamp - self::DUPLICATE_WINDOW;
-        $max = ($timestamp < $now ? $now : $timestamp) + self::DUPLICATE_WINDOW;
+        $max = (max($now, $timestamp)) + self::DUPLICATE_WINDOW;
 
         foreach ($this->pending($hook, $args) as $action) {
             $date = $action->get_schedule()->get_date();

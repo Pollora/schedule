@@ -98,7 +98,7 @@ final class CronInterceptor
      *
      * @return mixed The value, untouched
      */
-    private function updateOption(mixed $value, mixed $old = null, mixed $option = null): mixed
+    private function updateOption(mixed $value, mixed $old = null): mixed
     {
         if (CronIndex::writing() || ! is_array($value) || ! is_array($old)) {
             return $value;
@@ -158,7 +158,7 @@ final class CronInterceptor
      *
      * @return bool|\WP_Error|null
      */
-    private function rescheduleEvent(mixed $pre, object $event, bool $wpError = false): mixed
+    private function rescheduleEvent(mixed $pre, object $event): mixed
     {
         if ($pre !== null || $this->stepsAside) {
             return $pre;
@@ -183,7 +183,7 @@ final class CronInterceptor
     /**
      * @return bool|\WP_Error|null
      */
-    private function unscheduleEvent(mixed $pre, int $timestamp, string $hook, array $args, bool $wpError = false): mixed
+    private function unscheduleEvent(mixed $pre, int $timestamp, string $hook, array $args): mixed
     {
         if ($pre !== null || $this->stepsAside) {
             return $pre;
