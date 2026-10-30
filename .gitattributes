@@ -7,3 +7,10 @@
 /phpunit.xml.dist export-ignore
 /pint.json export-ignore
 /renovate.json export-ignore
+# Pollora harness (QA-06): development files stay out of the archive Composer downloads
+/.claude export-ignore
+/.harness.json export-ignore
+/AGENTS.md export-ignore
+/api-surface.json export-ignore
+/composer-dependency-analyser.php export-ignore
+/rector.php export-ignore
