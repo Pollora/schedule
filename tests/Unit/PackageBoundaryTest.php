@@ -35,6 +35,12 @@ arch('schedule stays free of the Laravel application')
         'wp_get_schedules',
         'wp_unschedule_hook',
         'WP_Error',
+        // WP-CLI, whose fakes the command tests load
+        'WP_CLI',
+        'WP_CLI\Formatter',
+        'Cron_Event_Command',
+        'is_wp_error',
+        'wp_list_pluck',
         'add_filter',
         'do_action_ref_array',
         'function_exists',
