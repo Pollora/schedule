@@ -151,3 +151,17 @@ it('warns about each event it could not move and ends in error', function (): vo
         ->and(WP_CLI::$warnings[0])->toBe('Could not move reports: the queue refused it')
         ->and($thrown)->toBe('Moved 0 event(s) from wp-cron to broken. Some events stayed where they were.');
 });
+
+it('reads a flag without a value as the text WP-CLI would show', function (): void {
+    expect(fn () => (new MigrateCommand)([], ['to' => true]))->toThrow(RuntimeException::class, "No schedule driver is named '1'.")
+        ->and(fn () => (new MigrateCommand)([], ['from' => true]))->toThrow(RuntimeException::class, "No schedule driver is named '1'.");
+});
+
+it('takes the driver that keeps events as the source, passing over what WP-Cron keeps', function (): void {
+    $this->cron = [MIGRATE_AT => ['core' => [md5(serialize([])) => ['schedule' => false, 'args' => []]]]];
+    CronIndex::record(new Event('reports', MIGRATE_AT + 1, 'daily', [], 86400), 'action-scheduler');
+
+    (new MigrateCommand)([], ['to' => 'wp-cron', 'dry-run' => true]);
+
+    expect(WP_CLI::$successes)->toBe(['Would move 1 event(s) from action-scheduler to wp-cron (dry run).']);
+});

@@ -107,3 +107,37 @@ it('lists nothing when the core cannot read the events', function (): void {
 
     expect(Formatter::$displayed[0][0])->toBe([]);
 });
+
+it('reads an option that is not an array as empty', function (): void {
+    Functions\when('_get_cron_array')->justReturn(false);
+    Cron_Event_Command::$events = [cronEvent('reports', 'daily')];
+
+    (new CronEventCommand)->list_([], []);
+
+    expect(Formatter::$displayed[0][0][0]->driver)->toBe('wp-cron');
+});
+
+it('reads the marker of an entry as text', function (): void {
+    $this->cron = [CRON_EVENT_AT => ['reports' => ['sig' => ['schedule' => 'daily', 'args' => [], CronIndex::MARKER => 5]]]];
+    Cron_Event_Command::$events = [cronEvent('reports', 'daily')];
+
+    (new CronEventCommand)->list_([], []);
+
+    expect(Formatter::$displayed[0][0][0]->driver)->toBe('5');
+});
+
+it('filters the listing on each of the columns the core lists', function (array $filter, array $kept): void {
+    Cron_Event_Command::$events = [cronEvent('reports', 'daily'), cronEvent('digest', null, 'other')];
+    Cron_Event_Command::$events[1]->next_run_gmt = '2000-01-01 00:00:00';
+    Cron_Event_Command::$events[1]->next_run_relative = 'long ago';
+
+    (new CronEventCommand)->list_([], $filter);
+
+    expect(array_column(Formatter::$displayed[0][0], 'hook'))->toBe($kept);
+})->with([
+    'next_run_gmt' => [['next_run_gmt' => '2000-01-01 00:00:00'], ['digest']],
+    'next_run_relative' => [['next_run_relative' => 'in the future'], ['reports']],
+    'recurrence' => [['recurrence' => 'Non-repeating'], ['digest']],
+    'hook' => [['hook' => 'reports'], ['reports']],
+    'two at once' => [['hook' => 'reports', 'recurrence' => 'Non-repeating'], []],
+]);
