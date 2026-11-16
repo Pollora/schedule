@@ -37,3 +37,19 @@ pest()->beforeEach(function (): void {
 
     Monkey\tearDown();
 })->in('Unit');
+
+/**
+ * Warnings and notices become exceptions for the length of a callback: a mutation that reads a missing key or a property of null shows.
+ */
+function strictly(callable $callback): mixed
+{
+    set_error_handler(static function (int $number, string $message): never {
+        throw new ErrorException($message, 0, $number);
+    });
+
+    try {
+        return $callback();
+    } finally {
+        restore_error_handler();
+    }
+}
