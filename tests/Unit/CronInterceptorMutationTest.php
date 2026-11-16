@@ -210,6 +210,12 @@ describe('rescheduling and unscheduling', function (): void {
         expect(strictly(fn () => ($this->filter)('pre_reschedule_event', null, ($this->event)(123, ICP_AT), false)))->toBeTrue();
     });
 
+    it('takes arguments the core gives as a single value for a list of one', function (): void {
+        CronIndex::record(new Event('digest', ICP_AT, null, ['x']), 'queue');
+
+        expect(strictly(fn () => ($this->filter)('pre_reschedule_event', null, (object) ['hook' => 'digest', 'timestamp' => ICP_AT, 'schedule' => 'daily', 'args' => 'x'], false)))->toBeTrue();
+    });
+
     it('leaves the reschedule of an event WP-Cron keeps to the core, and answers for one that is new', function (): void {
         expect(($this->filter)('pre_reschedule_event', null, ($this->event)('core', ICP_AT), false))->toBeTrue();
         CronIndex::record(new Event('core', ICP_AT), 'wp-cron');

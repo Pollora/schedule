@@ -12,6 +12,7 @@ use Pollora\Schedule\Tests\Support\FailingJobs;
 use Pollora\Schedule\Tests\Support\NamespacedJobs;
 use Spatie\StructureDiscoverer\Data\DiscoveredClass;
 use Spatie\StructureDiscoverer\Data\DiscoveredInterface;
+use Spatie\StructureDiscoverer\Data\DiscoveredStructure;
 
 require_once __DIR__.'/../Support/NamespacedJobs.php';
 
@@ -57,7 +58,7 @@ it('leaves what is not a class alone, without even asking it if it is abstract',
     $interface = DiscoveredInterface::fromReflection(new ReflectionClass(Countable::class));
 
     strictly(fn () => $discovery->discover($this->location, $interface, new ReflectionCache));
-    strictly(fn () => $discovery->discover($this->location, Mockery::mock(Spatie\StructureDiscoverer\Data\DiscoveredStructure::class), new ReflectionCache));
+    strictly(fn () => $discovery->discover($this->location, Mockery::mock(DiscoveredStructure::class), new ReflectionCache));
     strictly(fn () => $discovery->apply());
 
     expect($this->scheduled)->toBe([]);

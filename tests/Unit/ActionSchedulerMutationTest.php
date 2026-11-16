@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use Brain\Monkey\Functions;
 use Pollora\Schedule\Drivers\ActionSchedulerDriver;
-use Pollora\Schedule\Event;
 use Pollora\Schedule\Exceptions\ScheduleException;
 
 require_once __DIR__.'/../Support/ActionSchedulerFake.php';

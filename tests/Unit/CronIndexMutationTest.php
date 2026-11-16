@@ -240,6 +240,15 @@ describe('forgetting', function (): void {
             ->and($this->cron[IDX_AT]['digest'])->toHaveKey('core');
     });
 
+    it('forgets a hook whose value in the option is not a list of entries without failing', function (): void {
+        $this->cron = idxMessy();
+        $this->cron[IDX_AT]['scalar_hook'] = 'not entries';
+
+        strictly(fn () => CronIndex::forgetHook('scalar_hook', 'queue'));
+
+        expect($this->cron[IDX_AT]['scalar_hook'])->toBe('not entries');
+    });
+
     it('leaves no empty hook or timestamp behind in the entries it touches', function (): void {
         $this->cron = [IDX_AT => ['a' => [idxKey() => ['schedule' => false, 'args' => [], 'driver' => 'queue']], 'b' => [idxKey() => ['schedule' => false, 'args' => []]]]];
 
