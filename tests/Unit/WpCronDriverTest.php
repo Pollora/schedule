@@ -87,3 +87,29 @@ it('lists the events of the cron array, soonest first', function (): void {
         new Event('reports', 2000, 'daily', [], 86400, 'wp-cron'),
     ]);
 });
+
+it('says what went wrong, with WordPress\'s own words when it has them', function (): void {
+    Functions\when('wp_schedule_single_event')->justReturn(false);
+
+    expect(fn () => (new WpCronDriver)->once('digest', 5))->toThrow(ScheduleException::class, "WP-Cron: the event 'digest' could not be scheduled.");
+
+    Functions\when('wp_schedule_single_event')->justReturn(new StubWpError('nope', 'Boom'));
+
+    expect(fn () => (new WpCronDriver)->once('digest', 5))->toThrow(ScheduleException::class, "WP-Cron: the event 'digest' could not be scheduled: Boom");
+
+    Functions\when('wp_schedule_event')->justReturn(false);
+
+    expect(fn () => (new WpCronDriver)->recurring('digest', 5, 'daily'))->toThrow(ScheduleException::class, "WP-Cron: the event 'digest' could not be scheduled.");
+});
+
+it('counts nothing when WordPress answers with something other than a count, and reads the next run as an integer', function (): void {
+    Functions\when('wp_clear_scheduled_hook')->justReturn(false);
+    Functions\when('wp_unschedule_hook')->justReturn(new StubWpError('x'));
+    Functions\when('wp_next_scheduled')->justReturn('1234');
+
+    $driver = new WpCronDriver;
+
+    expect($driver->cancel('digest'))->toBe(0)
+        ->and($driver->clear('digest'))->toBe(0)
+        ->and($driver->next('digest'))->toBe(1234);
+});

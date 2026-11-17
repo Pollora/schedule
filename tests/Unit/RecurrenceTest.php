@@ -37,3 +37,20 @@ it('rejects an unknown schedule name and an incomplete array', function (): void
         ->and(fn () => Recurrence::key(['display' => 'x'], 'h'))->toThrow(InvalidArgumentException::class, 'interval')
         ->and(fn () => Recurrence::key(['interval' => 60], 'h'))->toThrow(InvalidArgumentException::class, 'display');
 });
+
+it('refuses an interval that is not a number and a display that is not text', function (): void {
+    expect(fn () => Recurrence::key(['interval' => 'often', 'display' => 'x'], 'h'))->toThrow(InvalidArgumentException::class, 'Custom schedule array must contain a numeric "interval" key (seconds)')
+        ->and(fn () => Recurrence::key(['interval' => 60, 'display' => 5], 'h'))->toThrow(InvalidArgumentException::class, 'Custom schedule array must contain a string "display" key (human-readable name)')
+        ->and(fn () => Recurrence::key(['interval' => 60, 'display' => ['x']], 'h'))->toThrow(InvalidArgumentException::class, 'string "display"');
+});
+
+it('registers a custom schedule with its interval as an integer', function (): void {
+    $key = Recurrence::key(['interval' => '90', 'display' => 'Every 90'], 'h');
+
+    expect($this->filters)->toHaveKey('cron_schedules');
+
+    $schedules = ($this->filters['cron_schedules'][0])(['daily' => ['interval' => 86400, 'display' => 'Once Daily']]);
+
+    expect($schedules[$key])->toBe(['interval' => 90, 'display' => 'Every 90'])
+        ->and($schedules)->toHaveKey('daily');
+});

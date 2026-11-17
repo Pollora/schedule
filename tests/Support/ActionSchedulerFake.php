@@ -132,7 +132,7 @@ function as_schedule_recurring_action($timestamp, $interval, $hook, $args = [], 
 
 function as_next_scheduled_action($hook, $args = null, $group = '')
 {
-    $matching = as_get_scheduled_actions(['hook' => $hook, 'args' => $args, 'group' => $group, 'status' => ['pending', 'in-progress']]);
+    $matching = as_get_scheduled_actions(['hook' => $hook, 'args' => $args, 'group' => $group, 'status' => ['pending', 'in-progress'], 'order' => 'ASC', 'per_page' => -1]);
 
     foreach ($matching as $action) {
         if ($action->status === 'in-progress') {
@@ -157,7 +157,11 @@ function as_get_scheduled_actions($args = [], $return_format = 'OBJECT'): array
         && (($args['group'] ?? '') === '' || $action->group === $args['group'])
         && (! array_key_exists('args', $args) || $args['args'] === null || $action->args === $args['args']));
 
-    uasort($found, static fn (FakeAction $a, FakeAction $b): int => $a->schedule->timestamp <=> $b->schedule->timestamp);
+    // Action Scheduler's own defaults: newest first, five a page
+    $direction = strtoupper((string) ($args['order'] ?? 'DESC')) === 'ASC' ? 1 : -1;
+    uasort($found, static fn (FakeAction $a, FakeAction $b): int => $direction * ($a->schedule->timestamp <=> $b->schedule->timestamp));
 
-    return $found;
+    $perPage = (int) ($args['per_page'] ?? 5);
+
+    return $perPage === -1 ? $found : array_slice($found, 0, $perPage, true);
 }
