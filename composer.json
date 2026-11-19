@@ -24,7 +24,7 @@
     "require": {
         "php": "^8.3",
         "pollora/attributes": "^0.1 || ^1.0",
-        "pollora/discovery": "^0.1 || ^1.0",
+        "pollora/discovery": "^0.1 || ^0.2 || ^1.0",
         "psr/container": "^1.1 || ^2.0",
         "psr/log": "^3.0"
     },
