@@ -591,6 +591,8 @@ final class ScheduleEngine
         try {
             foreach ($this->stores() as $store) {
                 $count += $store->cancel($hook, $args);
+
+                $this->unindex($store, static fn (string $owner) => CronIndex::forget($hook, $args, $owner));
             }
         } finally {
             $this->busy = false;
@@ -609,6 +611,21 @@ final class ScheduleEngine
     }
 
     /**
+     * Take what the chosen driver just cancelled out of the index, before WP-Cron's turn.
+     *
+     * The index is the 'cron' option, which WP-Cron's own functions read: left there, the entry would be counted as one
+     * more event cancelled when the core clears the same hook.
+     *
+     * @param  callable(string): void  $forget  Takes the entries of this driver out of the index
+     */
+    private function unindex(ScheduleDriver $store, callable $forget): void
+    {
+        if ($store === $this->driver && $this->indexes()) {
+            $forget($this->driverName);
+        }
+    }
+
+    /**
      * Cancel every event of a hook, in every store.
      */
     public function clear(string $hook): int
@@ -619,6 +636,8 @@ final class ScheduleEngine
         try {
             foreach ($this->stores() as $store) {
                 $count += $store->clear($hook);
+
+                $this->unindex($store, static fn (string $owner) => CronIndex::forgetHook($hook, $owner));
             }
         } finally {
             $this->busy = false;

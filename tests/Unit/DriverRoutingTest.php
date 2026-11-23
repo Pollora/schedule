@@ -193,6 +193,44 @@ it('reads, cancels and lists in both stores', function (): void {
         ->and($this->engine->next('digest'))->toBeNull();
 });
 
+it('counts an event cancelled once when the index lists it and WP-Cron clears the same option', function (): void {
+    // The core clears every entry of the option, the ones a driver keeps included
+    Functions\when('wp_clear_scheduled_hook')->alias(function (string $hook, array $args): int {
+        $removed = 0;
+
+        foreach ($this->cron as $timestamp => $hooks) {
+            if (isset($hooks[$hook][md5(serialize($args))])) {
+                unset($this->cron[$timestamp][$hook][md5(serialize($args))]);
+                $removed++;
+            }
+        }
+
+        return $removed;
+    });
+    $this->engine->schedule(new Event('digest', time() + 100, null, ['u' => 1]));
+
+    expect($this->engine->cancel('digest', ['u' => 1]))->toBe(1)
+        ->and(CronIndex::events('action-scheduler'))->toBe([]);
+});
+
+it('counts the events of a hook cleared once when the index lists them and WP-Cron clears the same option', function (): void {
+    Functions\when('wp_unschedule_hook')->alias(function (string $hook): int {
+        $removed = 0;
+
+        foreach ($this->cron as $timestamp => $hooks) {
+            $removed += count($hooks[$hook] ?? []);
+            unset($this->cron[$timestamp][$hook]);
+        }
+
+        return $removed;
+    });
+    $this->engine->schedule(new Event('digest', time() + 100, null, ['u' => 1]));
+    $this->engine->schedule(new Event('digest', time() + 200, null, ['u' => 2]));
+
+    expect($this->engine->clear('digest'))->toBe(2)
+        ->and(CronIndex::events('action-scheduler'))->toBe([]);
+});
+
 it('chooses a driver by name, and a site that never left WP-Cron hooks into nothing', function (): void {
     Schedule::extend('test', fn (): ScheduleDriver => new ScheduleFake);
     Schedule::driver('test');
