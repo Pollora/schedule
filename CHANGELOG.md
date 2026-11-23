@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- An integration suite (`tests/Integration`, `composer test:integration`) that runs against a real WordPress and, for the Action Scheduler driver, the real plugin: a recurring event in the `cron` option and its interval, the time of day on the site's clock, a due event run by `wp-cron.php` in another process, an event kept in Action Scheduler's store and indexed in the `cron` option, what a plugin schedules with the core functions, and the plugin's queue runner. It is not part of the default `pest` run; the harness's optional `WordPress integration` job starts it.
+
+### Fixed
+
+- `Schedule::cancel()` and `Schedule::clear()` counted an event twice, with Action Scheduler as the driver: the entry the index keeps in the `cron` option was still there when WP-Cron cleared the same hook, and the core counted it as one more event. The entry is taken out of the index as soon as the driver has cancelled the event.
+
 ## [1.0.1] - 2026-11-19
 
 ### Changed
