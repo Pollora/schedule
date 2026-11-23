@@ -83,11 +83,11 @@ it('runs a due event through the queue runner of Action Scheduler and leaves the
 
     ActionScheduler::runner()->run('Pollora integration');
 
-    // Action Scheduler passes the values of the arguments, not their names
+    // Action Scheduler runs the hook with the values only; the handler still gets the arguments it was scheduled with
     $ran = RecordingJob::recorded();
 
     expect($ran)->toHaveCount(1)
-        ->and(array_values($ran[0]))->toBe([7])
+        ->and($ran[0])->toBe(['order' => 7])
         ->and(as_get_scheduled_actions(['hook' => 'pollora_int_as_due', 'status' => ActionScheduler_Store::STATUS_COMPLETE, 'per_page' => -1], 'ids'))->toHaveCount(1)
         ->and(Cron::entries('pollora_int_as_due'))->toBe([]);
 });

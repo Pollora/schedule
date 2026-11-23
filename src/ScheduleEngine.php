@@ -13,6 +13,7 @@ use Pollora\Schedule\Contracts\ScheduleDriver;
 use Pollora\Schedule\Drivers\ActionSchedulerDriver;
 use Pollora\Schedule\Drivers\WpCronDriver;
 use Pollora\Schedule\Exceptions\ScheduleException;
+use Pollora\Schedule\Support\ActionArguments;
 use Pollora\Schedule\Support\CronIndex;
 use Pollora\Schedule\Support\CronInterceptor;
 use Psr\Container\ContainerInterface;
@@ -804,8 +805,8 @@ final class ScheduleEngine
 
         $this->attached[$key] = true;
 
-        add_action($hook, function (mixed ...$received) use ($handler): void {
-            $this->run($handler, $received);
+        add_action($hook, function (mixed ...$received) use ($hook, $handler): void {
+            $this->run($handler, ActionArguments::restore($hook, $received));
         }, 10, PHP_INT_MAX);
     }
 

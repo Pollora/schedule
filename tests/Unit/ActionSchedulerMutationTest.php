@@ -27,11 +27,15 @@ beforeEach(function (): void {
 });
 
 describe('reporting what happens to its actions', function (): void {
-    it('listens to the five hooks, first in line, one argument', function (): void {
+    it('listens to the five hooks, first in line, one argument, and follows the action it runs', function (): void {
         $this->driver->observe(fn () => null);
 
         expect($this->hooked)->toBe([
             ['action_scheduler_deleted_action', 10, 1],
+            ['action_scheduler_before_execute', 10, 1],
+            ['action_scheduler_after_execute', 10, 0],
+            ['action_scheduler_failed_execution', 10, 0],
+            ['action_scheduler_execution_ignored', 10, 0],
             ['action_scheduler_stored_action', 10, 1],
             ['action_scheduler_completed_action', 10, 1],
             ['action_scheduler_failed_action', 10, 1],
