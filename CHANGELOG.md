@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- With Action Scheduler as the driver, the handler of an event received the values of its named arguments only: `->with(['order' => 7])` reached it as `[7]`, while WP-Cron gave `['order' => 7]` (#35). Action Scheduler stores the arguments with their keys, and finds an action by them, but runs the hook with `array_values()`. The driver now tells the engine which action is running, and the handlers it attaches (`->call()`, `#[Schedule]`) take the keys back, so both drivers give the same arguments. Nothing stored changes: actions already scheduled are concerned too. A callback attached straight to the hook with `add_action()` still gets what Action Scheduler passes.
+
 ## [1.0.2] - 2026-11-23
 
 ### Added

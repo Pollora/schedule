@@ -12,6 +12,7 @@ use Pollora\Schedule\Contracts\ReportsChanges;
 use Pollora\Schedule\Contracts\ScheduleDriver;
 use Pollora\Schedule\Event;
 use Pollora\Schedule\Exceptions\ScheduleException;
+use Pollora\Schedule\Support\ActionArguments;
 
 /**
  * Schedules through Action Scheduler: its queue, its retries, its Tools ›
@@ -87,6 +88,19 @@ final class ActionSchedulerDriver implements DefersUntilReady, Enqueues, FindsEv
                 add_action('shutdown', static fn () => $changed('', []));
             }
         }, 10, 1);
+
+        // Action Scheduler runs the hook with the values of the arguments only: tell the handlers which keys they had
+        add_action('action_scheduler_before_execute', function (mixed $id): void {
+            $action = $this->fetch($id);
+
+            if ($action !== null) {
+                ActionArguments::running((string) $action->get_hook(), (array) $action->get_args());
+            }
+        }, 10, 1);
+
+        foreach (['action_scheduler_after_execute', 'action_scheduler_failed_execution', 'action_scheduler_execution_ignored'] as $hook) {
+            add_action($hook, static fn () => ActionArguments::finished(), 10, 0);
+        }
 
         foreach (['action_scheduler_stored_action', 'action_scheduler_completed_action', 'action_scheduler_failed_action', 'action_scheduler_canceled_action'] as $hook) {
             add_action($hook, $report, 10, 1);
