@@ -7,13 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-11-23
+
 ### Added
 
 - An integration suite (`tests/Integration`, `composer test:integration`) that runs against a real WordPress and, for the Action Scheduler driver, the real plugin: a recurring event in the `cron` option and its interval, the time of day on the site's clock, a due event run by `wp-cron.php` in another process, an event kept in Action Scheduler's store and indexed in the `cron` option, what a plugin schedules with the core functions, and the plugin's queue runner. It is not part of the default `pest` run; the harness's optional `WordPress integration` job starts it.
 
 ### Changed
-
-- Accepts pollora/discovery ^0.3 (`^0.1 || ^0.2 || ^0.3 || ^1.0`)
+- Accepts `pollora/discovery` ^0.3 (`^0.1 || ^0.2 || ^0.3 || ^1.0`)
 
 ### Fixed
 
