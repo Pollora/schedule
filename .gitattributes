@@ -14,3 +14,4 @@
 /api-surface.json export-ignore
 /composer-dependency-analyser.php export-ignore
 /rector.php export-ignore
+/phpunit.integration.xml export-ignore

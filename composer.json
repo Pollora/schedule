@@ -57,6 +57,7 @@
         ],
         "test:unit": "pest",
         "test:coverage": "pest --coverage",
+        "test:integration": "pest -c phpunit.integration.xml",
         "phpstan": "phpstan analyse",
         "phpstan:ci": "phpstan analyse --no-progress",
         "lint": "pint",
