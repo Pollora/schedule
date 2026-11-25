@@ -336,7 +336,7 @@ final class ScheduleEngine
 
     public function protect(string ...$hooks): void
     {
-        $this->protectedHooks = [...$this->protectedHooks, ...$hooks];
+        $this->protectedHooks = [...$this->protectedHooks, ...array_values($hooks)];
     }
 
     /**
@@ -817,7 +817,10 @@ final class ScheduleEngine
     private function run(string|array|Closure $handler, array $args): void
     {
         if (is_string($handler) && ! class_exists($handler)) {
-            do_action_ref_array($handler, $args);
+            // No hook has an empty name: there is nothing to fire
+            if ($handler !== '') {
+                do_action_ref_array($handler, $args);
+            }
 
             return;
         }
@@ -843,12 +846,23 @@ final class ScheduleEngine
         }
 
         if (is_string($handler)) {
-            return $this->instance($handler);
+            $invokable = $this->instance($handler);
+
+            if (! is_callable($invokable)) {
+                throw new ScheduleException(sprintf("The handler '%s' is not invokable: give it an __invoke() method, or use [class, method].", $handler));
+            }
+
+            return $invokable;
         }
 
         [$target, $method] = $handler;
+        $callable = [is_object($target) ? $target : $this->instance($target), $method];
 
-        return [is_object($target) ? $target : $this->instance($target), $method];
+        if (! is_callable($callable)) {
+            throw new ScheduleException(sprintf("The handler '%s::%s' is not callable.", is_object($target) ? $target::class : $target, $method));
+        }
+
+        return $callable;
     }
 
     private function instance(string $class): object
@@ -858,10 +872,14 @@ final class ScheduleEngine
                 return $this->container->get($class);
             } catch (NotFoundExceptionInterface $exception) {
                 // Not something the container knows: build it plainly, unless it needs arguments the container failed to give.
-                if (((new \ReflectionClass($class))->getConstructor()?->getNumberOfRequiredParameters() ?? 0) > 0) {
+                if (! class_exists($class) || ((new \ReflectionClass($class))->getConstructor()?->getNumberOfRequiredParameters() ?? 0) > 0) {
                     throw $exception;
                 }
             }
+        }
+
+        if (! class_exists($class)) {
+            throw new ScheduleException(sprintf("The handler class '%s' does not exist.", $class));
         }
 
         return new $class;
