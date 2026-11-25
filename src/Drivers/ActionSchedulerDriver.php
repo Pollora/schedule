@@ -190,6 +190,8 @@ final class ActionSchedulerDriver implements DefersUntilReady, Enqueues, FindsEv
 
     /**
      * The action of the group with this identifier, null for another group's or a missing one.
+     *
+     * @return \ActionScheduler_Action|null
      */
     private function fetch(mixed $id): ?object
     {
@@ -206,7 +208,7 @@ final class ActionSchedulerDriver implements DefersUntilReady, Enqueues, FindsEv
      * Pending actions of the group, soonest first.
      *
      * @param  array<int|string, mixed>|null  $args  Exact arguments, null for any
-     * @return array<int, object>
+     * @return array<int, \ActionScheduler_Action>
      */
     private function pending(?string $hook = null, ?array $args = null): array
     {
@@ -224,7 +226,7 @@ final class ActionSchedulerDriver implements DefersUntilReady, Enqueues, FindsEv
     }
 
     /**
-     * @param  array<int, object>  $actions
+     * @param  array<int, \ActionScheduler_Action>  $actions
      */
     private function cancelActions(array $actions): int
     {
@@ -255,6 +257,9 @@ final class ActionSchedulerDriver implements DefersUntilReady, Enqueues, FindsEv
         return false;
     }
 
+    /**
+     * @param  \ActionScheduler_Action  $action
+     */
     private function toEvent(object $action): Event
     {
         $schedule = $action->get_schedule();
