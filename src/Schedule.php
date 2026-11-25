@@ -106,8 +106,11 @@ final class Schedule
 
     public static function engine(): ScheduleEngine
     {
-        if (! self::$engine instanceof ScheduleEngine) {
-            self::$engine = new ScheduleEngine;
+        $engine = self::$engine;
+
+        if (! $engine instanceof ScheduleEngine) {
+            $engine = new ScheduleEngine;
+            self::$engine = $engine;
 
             $name = getenv('POLLORA_SCHEDULE_DRIVER');
 
@@ -122,7 +125,7 @@ final class Schedule
 
         self::boot();
 
-        return self::$engine;
+        return $engine;
     }
 
     /**
