@@ -60,7 +60,8 @@ final class ScheduleDiscovery implements DiscoveryInterface
 
         try {
             $className = $structure->namespace.'\\'.$structure->name;
-            $methods = $reflectionCache->getPublicMethods($className);
+            // The cache is optional in the contract: without one, reflect the class directly instead of discovering nothing
+            $methods = $reflectionCache?->getPublicMethods($className) ?? (class_exists($className) ? (new \ReflectionClass($className))->getMethods(\ReflectionMethod::IS_PUBLIC) : []);
 
             foreach ($methods as $method) {
                 $scheduleAttributes = $method->getAttributes(Schedule::class);
