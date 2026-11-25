@@ -6,6 +6,7 @@ use Brain\Monkey\Filters;
 use Brain\Monkey\Functions;
 use Pollora\Schedule\Drivers\WpCronDriver;
 use Pollora\Schedule\Event;
+use Pollora\Schedule\Exceptions\ScheduleException;
 use Pollora\Schedule\ScheduleEngine;
 use Pollora\Schedule\Support\CronIndex;
 use Pollora\Schedule\Tests\Support\EngineProbe;
@@ -473,6 +474,31 @@ describe('attaching handlers', function (): void {
         ($this->actions['digest'][0])();
 
         expect($received)->toBe([['x'], []]);
+    });
+
+    it('says so when a class handler is not invokable, instead of failing on the call', function (): void {
+        $handler = (new class {})::class;
+        (new ScheduleEngine)->attach('digest', $handler);
+
+        expect(fn () => ($this->actions['digest'][0])())->toThrow(ScheduleException::class, 'is not invokable');
+    });
+
+    it('says so when a [class, method] handler has no such method', function (): void {
+        (new ScheduleEngine)->attach('digest', [new class {}, 'missing']);
+
+        expect(fn () => ($this->actions['digest'][0])())->toThrow(ScheduleException::class, 'is not callable');
+    });
+
+    it('fires nothing for an empty hook name', function (): void {
+        $fired = [];
+        Functions\when('do_action_ref_array')->alias(function (string $hook) use (&$fired): void {
+            $fired[] = $hook;
+        });
+        (new ScheduleEngine)->attach('digest', '');
+
+        ($this->actions['digest'][0])();
+
+        expect($fired)->toBe([]);
     });
 
     it('tells handlers apart: by hook, handler, object and method', function (): void {

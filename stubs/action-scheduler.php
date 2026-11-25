@@ -18,7 +18,37 @@ abstract class ActionScheduler_Store
 
     abstract public function cancel_action($action_id);
 
+    /**
+     * @return ActionScheduler_Action|null
+     */
     abstract public function fetch_action($action_id);
+}
+
+class ActionScheduler_Action
+{
+    public function get_hook(): string {}
+
+    /**
+     * @return array<int|string, mixed>
+     */
+    public function get_args(): array {}
+
+    public function get_schedule(): ActionScheduler_Schedule {}
+
+    public function get_group(): string {}
+}
+
+interface ActionScheduler_Schedule
+{
+    public function get_date(): ?DateTime;
+}
+
+/**
+ * A recurring action's schedule, which is the one that knows its recurrence.
+ */
+interface ActionScheduler_RecurringSchedule extends ActionScheduler_Schedule
+{
+    public function get_recurrence(): int|string;
 }
 
 /**
@@ -47,6 +77,6 @@ function as_next_scheduled_action(string $hook, ?array $args = null, string $gro
 
 /**
  * @param  array<string, mixed>  $args
- * @return array<int, object>
+ * @return array<int, ActionScheduler_Action>
  */
 function as_get_scheduled_actions(array $args = [], string $return_format = 'OBJECT'): array {}

@@ -421,7 +421,7 @@ final class CronIndex
         self::$writing = true;
 
         try {
-            _set_cron_array($crons);
+            _set_cron_array($crons); // @phpstan-ignore argument.type (the array is the one _get_cron_array() returned, with the core's 'version' key the stub's shape leaves out)
         } finally {
             self::$writing = false;
         }
