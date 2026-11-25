@@ -115,6 +115,7 @@ final class CronInterceptor
 
     /**
      * @param  mixed  $pre  What an earlier filter returned
+     * @param  object{hook: string, timestamp: int, schedule?: string|false, args: array<int|string, mixed>, interval?: int}  $event  The event object WordPress passes
      * @return bool|\WP_Error|null
      */
     private function scheduleEvent(mixed $pre, object $event, bool $wpError = false): mixed
@@ -156,6 +157,7 @@ final class CronInterceptor
      * another driver keeps, the second step must not cancel what the first said
      * was kept, so the pair is remembered.
      *
+     * @param  object{hook: string, timestamp: int, schedule?: string|false, args: array<int|string, mixed>, interval?: int}  $event  The event object WordPress passes
      * @return bool|\WP_Error|null
      */
     private function rescheduleEvent(mixed $pre, object $event): mixed
@@ -243,7 +245,7 @@ final class CronInterceptor
         $indexed = CronIndex::countMarked($hook, $args);
         $cancelled = $this->engine->quietly(fn (): int => $this->engine->stores()[0]->cancel($hook, $args));
 
-        return $this->withCore(static fn () => wp_clear_scheduled_hook($hook, $args, $wpError), max(0, $cancelled - $indexed));
+        return $this->withCore(static fn () => wp_clear_scheduled_hook($hook, $args, $wpError), max(0, $cancelled - $indexed)); // @phpstan-ignore argument.type (core documents $args as array and keeps its keys; the stub narrows it to a list, but the engine keeps named arguments: same arguments as the index)
     }
 
     /**
