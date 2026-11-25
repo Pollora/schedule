@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `ScheduleDiscovery::discover()` found nothing, silently, when it was called without a reflection cache: the contract (`DiscoveryInterface`) makes the cache optional, but the method dereferenced it inside a `try` that swallows every error. It now reflects the class directly when no cache is given.
+
 ## [1.0.3] - 2026-11-23
 
 ### Fixed
