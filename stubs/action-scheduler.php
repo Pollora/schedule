@@ -40,7 +40,7 @@ class ActionScheduler_Action
 
 interface ActionScheduler_Schedule
 {
-    public function get_date(): ?\DateTime;
+    public function get_date(): ?DateTime;
 }
 
 /**
