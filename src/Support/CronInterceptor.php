@@ -181,6 +181,7 @@ final class CronInterceptor
     }
 
     /**
+     * @param  array<int|string, mixed>  $args
      * @return bool|\WP_Error|null
      */
     private function unscheduleEvent(mixed $pre, int $timestamp, string $hook, array $args): mixed
@@ -230,6 +231,7 @@ final class CronInterceptor
     }
 
     /**
+     * @param  array<int|string, mixed>  $args
      * @return int|false|\WP_Error|null
      */
     private function clearScheduledHook(mixed $pre, string $hook, array $args, bool $wpError = false): mixed
