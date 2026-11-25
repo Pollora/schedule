@@ -105,6 +105,16 @@ it('waits for init when the discovery is applied before WordPress has loaded its
     expect($this->events)->toHaveKeys(['nightly_reports_compile', 'reports_ping', 'nightly_reports_archive_old_reports']);
 });
 
+it('discovers the methods without a reflection cache, which the contract makes optional', function (): void {
+    $this->events = [];
+
+    $discovery = new ScheduleDiscovery;
+    $discovery->discover(new DiscoveryLocation('', __DIR__), DiscoveredClass::fromReflection(new ReflectionClass(NightlyReports::class)));
+    $discovery->apply();
+
+    expect($this->events)->toHaveKeys(['nightly_reports_compile', 'reports_ping', 'nightly_reports_archive_old_reports']);
+});
+
 it('registers the schedules WordPress does not know', function (): void {
     $schedules = array_reduce($this->filters['cron_schedules'], fn (array $schedules, callable $filter): array => $filter($schedules), []);
 
