@@ -24,7 +24,7 @@ final class WpCronDriver implements ScheduleDriver
 
     public function once(string $hook, int $timestamp, array $args = []): bool
     {
-        $result = wp_schedule_single_event($timestamp, $hook, $args, true);
+        $result = wp_schedule_single_event($timestamp, $hook, $args, true); // @phpstan-ignore argument.type (core documents $args as array and keeps its keys; the stub narrows it to a list, but the engine keeps named arguments: see ActionArguments)
 
         if (! self::failed($result)) {
             return true;
@@ -39,7 +39,7 @@ final class WpCronDriver implements ScheduleDriver
 
     public function recurring(string $hook, int $timestamp, string $recurrence, array $args = []): bool
     {
-        $result = wp_schedule_event($timestamp, $recurrence, $hook, $args, true);
+        $result = wp_schedule_event($timestamp, $recurrence, $hook, $args, true); // @phpstan-ignore argument.type (core documents $args as array and keeps its keys; the stub narrows it to a list, but the engine keeps named arguments: see ActionArguments)
 
         if (self::failed($result)) {
             throw new ScheduleException(sprintf("WP-Cron: the event '%s' could not be scheduled%s", $hook, self::reason($result)));
@@ -50,7 +50,7 @@ final class WpCronDriver implements ScheduleDriver
 
     public function cancel(string $hook, array $args = []): int
     {
-        return self::count(wp_clear_scheduled_hook($hook, $args, true));
+        return self::count(wp_clear_scheduled_hook($hook, $args, true)); // @phpstan-ignore argument.type (core documents $args as array and keeps its keys; the stub narrows it to a list, but the engine keeps named arguments: see ActionArguments)
     }
 
     public function clear(string $hook): int
@@ -60,7 +60,7 @@ final class WpCronDriver implements ScheduleDriver
 
     public function next(string $hook, array $args = []): ?int
     {
-        $next = wp_next_scheduled($hook, $args);
+        $next = wp_next_scheduled($hook, $args); // @phpstan-ignore argument.type (core documents $args as array and keeps its keys; the stub narrows it to a list, but the engine keeps named arguments: see ActionArguments)
 
         return $next === false ? null : (int) $next;
     }
