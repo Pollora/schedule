@@ -811,6 +811,7 @@ final class ScheduleEngine
     }
 
     /**
+     * @param  string|array{0: class-string|object, 1: string}|Closure  $handler
      * @param  array<int|string, mixed>  $args  What WordPress passed the hook
      */
     private function run(string|array|Closure $handler, array $args): void
@@ -832,6 +833,9 @@ final class ScheduleEngine
         $callable($args);
     }
 
+    /**
+     * @param  string|array{0: class-string|object, 1: string}|Closure  $handler
+     */
     private function resolve(string|array|Closure $handler): callable
     {
         if ($handler instanceof Closure) {
