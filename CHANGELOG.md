@@ -7,9 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.4] - 2026-11-26
+
 ### Fixed
 
 - `ScheduleDiscovery::discover()` found nothing, silently, when it was called without a reflection cache: the contract (`DiscoveryInterface`) makes the cache optional, but the method dereferenced it inside a `try` that swallows every error. It now reflects the class directly when no cache is given.
+
+### Changed
+
+- A handler that cannot be run (a class that does not exist or has no `__invoke()`, a method that is not callable) throws a `ScheduleException` that names it, instead of a PHP `Error`
 
 ## [1.0.3] - 2026-11-23
 
